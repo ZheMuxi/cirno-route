@@ -1,0 +1,668 @@
+{
+  "schema_version": "1",
+  "description": "Frozen before first validation inference; extends the original seven holdout cases with implicit missing inputs and supplied-input contrast. No provider success labels.",
+  "cases": [
+    {
+      "id": "validation-missing-report",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "根据我未粘贴的季度报告计算收入增长率，请给出确数。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_unknown": true
+      }
+    },
+    {
+      "id": "validation-missing-reference",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "继续修改上一个对话中的代码；本次请求没有携带那份代码和上下文。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_unknown": true
+      }
+    },
+    {
+      "id": "validation-file-check",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "写一个检查数据文件是否缺失的Python函数，只交付函数和单元测试，不检查我的文件。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_known": true
+      }
+    },
+    {
+      "id": "validation-quoted-missing",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "把这句界面提示翻译成英文：“没有找到附件，请重新上传。”",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_known": true
+      }
+    },
+    {
+      "id": "validation-generic-database",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "用两句话解释数据库事务隔离，不访问任何实际数据库。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_known": true
+      }
+    },
+    {
+      "id": "validation-partial-audio",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "把“欢迎光临”合成为中文语音，输出可下载的MP3文件。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "voice",
+            "model": "synthetic/voice",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-voice",
+                "source": "configured",
+                "summary": "合成资料：已配置可用的中文语音合成工具，接受任意中文文字，输出MP3语音文件并返回下载链接。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "general",
+            "model": "synthetic/general",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-general",
+                "source": "configured",
+                "summary": "配置声明：支持一般中文问答，没有关于语音生成或文件输出的资料。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "textonly",
+            "model": "synthetic/textonly",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-textonly",
+                "source": "configured",
+                "summary": "合成资料：只能输出纯文本，不能生成音频和二进制文件。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "unknown_candidates": [
+          "general"
+        ],
+        "exact_scores": {
+          "voice": 4,
+          "textonly": 0
+        }
+      }
+    },
+    {
+      "id": "validation-no-evidence",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "生成一张1024×1024的蓝色海洋PNG图，交付可下载文件。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "render",
+            "model": "synthetic/render",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-render",
+                "source": "configured",
+                "summary": "合成资料：提供已可用的图像绘制与文件输出工具，可生成任意内容的1024×1024 PNG图片并返回下载文件。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "general",
+            "model": "synthetic/general",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": []
+          },
+          {
+            "candidate_id": "textonly",
+            "model": "synthetic/textonly",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-textonly",
+                "source": "configured",
+                "summary": "合成资料：仅能输出纯文本，明确不能创建图片或二进制文件。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "unknown_candidates": [
+          "general"
+        ],
+        "exact_scores": {
+          "render": 4,
+          "textonly": 0
+        }
+      }
+    },
+    {
+      "id": "validation-implicit-attachment",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "请概括附件里的三个主要结论。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_unknown": true
+      }
+    },
+    {
+      "id": "validation-implicit-code",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "帮我找出这段函数的错误并修复。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_unknown": true
+      }
+    },
+    {
+      "id": "validation-supplied-report",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "请概括这份报告：本季度收入100万元，上季度80万元，主要增长来自老客户续约，新增客户数量持平。只根据这些内容写两句总结。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_known": true
+      }
+    }
+  ]
+}

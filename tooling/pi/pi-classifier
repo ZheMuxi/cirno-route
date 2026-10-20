@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+PI_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$PI_DIR/../cirno-route/scripts/start-pi.sh" "$@"

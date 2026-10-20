@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+PI_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+TOKEN_FILE="$PI_DIR/../cirno-route/.runtime/llama.token"
+if [ ! -r "$TOKEN_FILE" ]; then
+  printf '%s\n' 'Local model token is missing. Run cirno-route init first.' >&2
+  exit 1
+fi
+CIRNO_LLAMA_API_KEY=$(cat "$TOKEN_FILE")
+export CIRNO_LLAMA_API_KEY
+export PI_OFFLINE=1
+export PI_TELEMETRY=0
+exec "$PI_DIR/pi" --offline --model cirno-local/cirno-gemma-e4b --thinking off "$@"

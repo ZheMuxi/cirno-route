@@ -1,0 +1,26 @@
+{
+  "model": {
+    "url": "https://huggingface.co/HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive/resolve/45b6a334b4bcd1d7f37179df58b3b1d66a184e5d/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+    "filename": "Gemma-4-E4B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf",
+    "sha256": "d0027dd3a9128d9323e9f282c8bf010a8526c46477584535991dc1a869b56e96",
+    "size": 5335285728,
+    "hf_repo": "models--HauhauCS--Gemma-4-E4B-Uncensored-HauhauCS-Aggressive"
+  },
+  "runtime": {
+    "version": "b10516-b95502ba9",
+    "build": "10516",
+    "commit": "b95502ba9",
+    "assets": {
+      "Darwin-arm64": {
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10516/llama-b10516-bin-macos-arm64.tar.gz",
+        "filename": "llama-b10516-bin-macos-arm64.tar.gz",
+        "sha256": "ee3324327d621026ae80c24031670e65fa62a0b23a3a027dbe2f65f240affd30"
+      },
+      "Darwin-x86_64": {
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b10516/llama-b10516-bin-macos-x64.tar.gz",
+        "filename": "llama-b10516-bin-macos-x64.tar.gz",
+        "sha256": "b7adecf7bd2cde577ddabee8357a72409165d8104f43b4acee9f1b98cc9c447a"
+      }
+    }
+  }
+}

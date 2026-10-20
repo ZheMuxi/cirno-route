@@ -1,0 +1,26 @@
+{
+  "schema_version": "1",
+  "task": {
+    "text": "用 Python 实现稳定的归并排序，给出可运行代码以及覆盖空列表和重复值的测试。",
+    "task_type": "coding",
+    "requirements": ["可运行的 Python 代码", "解释时间复杂度"]
+  },
+  "eligible_candidates": [
+    {
+      "candidate_id": "demo_general", "model": "demo/general", "revision": "demo-v1",
+      "capabilities": ["通用中文问答"],
+      "evidence": [{"evidence_id": "general-config-v1", "source": "configured", "summary": "演示配置：适合通用中文解释，只支持简单代码阅读，未验证代码生成。"}]
+    },
+    {
+      "candidate_id": "demo_code", "model": "demo/code", "revision": "demo-v1",
+      "capabilities": ["Python", "代码生成", "测试编写"],
+      "evidence": [{"evidence_id": "code-config-v1", "source": "configured", "summary": "演示配置：专长为 Python 算法实现、单元测试与复杂度分析。这是配置声明，没有实测成功率。"}]
+    },
+    {
+      "candidate_id": "demo_writer", "model": "demo/writer", "revision": "demo-v1",
+      "capabilities": ["文学写作"],
+      "evidence": [{"evidence_id": "writer-config-v1", "source": "configured", "summary": "演示配置：适合文学创作与文案润色，不支持代码生成。"}]
+    }
+  ],
+  "relevant_preferences": []
+}

@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+PI_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+export PI_CODING_AGENT_DIR="${PI_CODING_AGENT_DIR:-$PI_DIR/.state}"
+exec "$PI_DIR/node_modules/.bin/pi" "$@"

@@ -1,0 +1,1257 @@
+{
+  "schema_version": "1",
+  "description": "V3 frozen evidence sufficiency and permutation checks; synthetic labels, not measured provider accuracy. Includes ready/missing contrasts and partial unknowns.",
+  "cases": [
+    {
+      "id": "dev-missing-photo",
+      "split": "dev",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "识别我未提供的照片中具体人物的姓名，要求确切身份。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_unknown": true
+      }
+    },
+    {
+      "id": "dev-missing-database",
+      "split": "dev",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "请保证实时给出此刻某尚未提供名称的私有数据库中正在执行的所有事务。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_unknown": true
+      }
+    },
+    {
+      "id": "dev-method-csv",
+      "split": "dev",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "写Python函数读取CSV并计算amount列总和，给出示例与测试，不需要运行真实CSV。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_known": true
+      }
+    },
+    {
+      "id": "dev-simple",
+      "split": "dev",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "计算37乘19，只需要结果。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_known": true,
+        "equal_scores": true
+      }
+    },
+    {
+      "id": "dev-partial-evidence",
+      "split": "dev",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "生成一张1024×1024的森林风景PNG图片，交付可下载的图片文件。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "render",
+            "model": "synthetic/render",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-render",
+                "source": "configured",
+                "summary": "合成资料：提供已可用的图像绘制与文件输出工具，可生成任意内容的1024×1024 PNG图片并返回下载文件。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "general",
+            "model": "synthetic/general",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-general",
+                "source": "configured",
+                "summary": "配置声明：支持一般中文问答。其他能力没有资料。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "textonly",
+            "model": "synthetic/textonly",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-textonly",
+                "source": "configured",
+                "summary": "合成资料：仅能输出纯文本，明确不能创建图片或二进制文件。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "unknown_candidates": [
+          "general"
+        ],
+        "exact_scores": {
+          "render": 4,
+          "textonly": 0
+        }
+      }
+    },
+    {
+      "id": "dev-explicit-missing-requirement",
+      "split": "dev",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "计算本月总支出。",
+          "requirements": [
+            "必须使用我的真实账单数字；目前尚未提供账单，不能举例或估算。"
+          ]
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_unknown": true
+      }
+    },
+    {
+      "id": "validation-missing-report",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "根据我未粘贴的季度报告计算收入增长率，请给出确数。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_unknown": true
+      }
+    },
+    {
+      "id": "validation-missing-reference",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "继续修改上一个对话中的代码；本次请求没有携带那份代码和上下文。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_unknown": true
+      }
+    },
+    {
+      "id": "validation-file-check",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "写一个检查数据文件是否缺失的Python函数，只交付函数和单元测试，不检查我的文件。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_known": true
+      }
+    },
+    {
+      "id": "validation-quoted-missing",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "把这句界面提示翻译成英文：“没有找到附件，请重新上传。”",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_known": true
+      }
+    },
+    {
+      "id": "validation-generic-database",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "用两句话解释数据库事务隔离，不访问任何实际数据库。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "sonnet-4-6",
+            "model": "claude-sonnet-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "代码生成与修复",
+              "通用问答与文档分析",
+              "Agent 任务"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "sonnet-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Sonnet 4.6 公告描述代码、Agent 规划和知识工作能力。适用于常规编程、代码修复和通用工作；不表示在本站优于其他候选。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "opus-4-6",
+            "model": "claude-opus-4-6",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "复杂代码分析与重构",
+              "多步骤推理",
+              "通用知识工作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "opus-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Anthropic Opus 4.6 与 Sonnet 4.6 公告将 Opus 用于深入推理、代码库重构和复杂多步骤任务；也能处理一般任务。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "gemini-3-flash",
+            "model": "gemini-3-flash",
+            "revision": "gateway-alias-2026-10-14",
+            "capabilities": [
+              "通用问答",
+              "交互式代码辅助",
+              "文案与摘要"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "flash-config-v1",
+                "source": "configured",
+                "summary": "配置依据：Google Gemini 3 Flash 公告定位交互响应和代码辅助的通用模型。可用于一般问答、摘要和编程；未验证复杂任务相对表现。质量评分不包含速度或成本。网关只公开别名，后端 revision 未核实；尚无本地表现测量。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "all_known": true
+      }
+    },
+    {
+      "id": "validation-partial-audio",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "把“欢迎光临”合成为中文语音，输出可下载的MP3文件。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "voice",
+            "model": "synthetic/voice",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-voice",
+                "source": "configured",
+                "summary": "合成资料：已配置可用的中文语音合成工具，接受任意中文文字，输出MP3语音文件并返回下载链接。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "general",
+            "model": "synthetic/general",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-general",
+                "source": "configured",
+                "summary": "配置声明：支持一般中文问答，没有关于语音生成或文件输出的资料。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "textonly",
+            "model": "synthetic/textonly",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-textonly",
+                "source": "configured",
+                "summary": "合成资料：只能输出纯文本，不能生成音频和二进制文件。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "unknown_candidates": [
+          "general"
+        ],
+        "exact_scores": {
+          "voice": 4,
+          "textonly": 0
+        }
+      }
+    },
+    {
+      "id": "validation-no-evidence",
+      "split": "validation",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "生成一张1024×1024的蓝色海洋PNG图，交付可下载文件。",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "render",
+            "model": "synthetic/render",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-render",
+                "source": "configured",
+                "summary": "合成资料：提供已可用的图像绘制与文件输出工具，可生成任意内容的1024×1024 PNG图片并返回下载文件。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "general",
+            "model": "synthetic/general",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": []
+          },
+          {
+            "candidate_id": "textonly",
+            "model": "synthetic/textonly",
+            "revision": "probe-v3",
+            "capabilities": [],
+            "evidence": [
+              {
+                "evidence_id": "ev-textonly",
+                "source": "configured",
+                "summary": "合成资料：仅能输出纯文本，明确不能创建图片或二进制文件。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "unknown_candidates": [
+          "general"
+        ],
+        "exact_scores": {
+          "render": 4,
+          "textonly": 0
+        }
+      }
+    },
+    {
+      "id": "order-0",
+      "split": "order",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "将这句报错改写为礼貌易懂的中文界面文案，不分析代码：TypeError: unsupported operand type(s).",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "probe_code",
+            "model": "synthetic/alpha",
+            "revision": "probe-v1",
+            "capabilities": [
+              "Python编程"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-code",
+                "source": "configured",
+                "summary": "合成测试资料：专长为Python函数实现、错误修复、单元测试和复杂度分析；可分析程序逻辑。明确不提供中英文文学创作、自然语言翻译或纯数学证明。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_text",
+            "model": "synthetic/beta",
+            "revision": "probe-v1",
+            "capabilities": [
+              "文本翻译与写作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-text",
+                "source": "configured",
+                "summary": "合成测试资料：专长为中英文翻译、中文文案、叙事写作、改写和语气润色，包括技术文本的语言转换；不能实现或调试程序，也不保证算术或数学证明正确。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_data",
+            "model": "synthetic/gamma",
+            "revision": "probe-v1",
+            "capabilities": [
+              "结构化提取",
+              "数学推理"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-data",
+                "source": "configured",
+                "summary": "合成测试资料：专长为从给定文本逐字提取字段、输出严格JSON、表格统计、数学计算和严谨证明；可以理解给定数据，不支持写程序、排查代码错误或文学创作。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "strict_winner": "probe_text"
+      }
+    },
+    {
+      "id": "order-1",
+      "split": "order",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "将这句报错改写为礼貌易懂的中文界面文案，不分析代码：TypeError: unsupported operand type(s).",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "probe_code",
+            "model": "synthetic/alpha",
+            "revision": "probe-v1",
+            "capabilities": [
+              "Python编程"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-code",
+                "source": "configured",
+                "summary": "合成测试资料：专长为Python函数实现、错误修复、单元测试和复杂度分析；可分析程序逻辑。明确不提供中英文文学创作、自然语言翻译或纯数学证明。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_data",
+            "model": "synthetic/gamma",
+            "revision": "probe-v1",
+            "capabilities": [
+              "结构化提取",
+              "数学推理"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-data",
+                "source": "configured",
+                "summary": "合成测试资料：专长为从给定文本逐字提取字段、输出严格JSON、表格统计、数学计算和严谨证明；可以理解给定数据，不支持写程序、排查代码错误或文学创作。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_text",
+            "model": "synthetic/beta",
+            "revision": "probe-v1",
+            "capabilities": [
+              "文本翻译与写作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-text",
+                "source": "configured",
+                "summary": "合成测试资料：专长为中英文翻译、中文文案、叙事写作、改写和语气润色，包括技术文本的语言转换；不能实现或调试程序，也不保证算术或数学证明正确。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "strict_winner": "probe_text",
+        "same_as": "order-0",
+        "same_prediction": true
+      }
+    },
+    {
+      "id": "order-2",
+      "split": "order",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "将这句报错改写为礼貌易懂的中文界面文案，不分析代码：TypeError: unsupported operand type(s).",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "probe_text",
+            "model": "synthetic/beta",
+            "revision": "probe-v1",
+            "capabilities": [
+              "文本翻译与写作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-text",
+                "source": "configured",
+                "summary": "合成测试资料：专长为中英文翻译、中文文案、叙事写作、改写和语气润色，包括技术文本的语言转换；不能实现或调试程序，也不保证算术或数学证明正确。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_code",
+            "model": "synthetic/alpha",
+            "revision": "probe-v1",
+            "capabilities": [
+              "Python编程"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-code",
+                "source": "configured",
+                "summary": "合成测试资料：专长为Python函数实现、错误修复、单元测试和复杂度分析；可分析程序逻辑。明确不提供中英文文学创作、自然语言翻译或纯数学证明。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_data",
+            "model": "synthetic/gamma",
+            "revision": "probe-v1",
+            "capabilities": [
+              "结构化提取",
+              "数学推理"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-data",
+                "source": "configured",
+                "summary": "合成测试资料：专长为从给定文本逐字提取字段、输出严格JSON、表格统计、数学计算和严谨证明；可以理解给定数据，不支持写程序、排查代码错误或文学创作。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "strict_winner": "probe_text",
+        "same_as": "order-0",
+        "same_prediction": true
+      }
+    },
+    {
+      "id": "order-3",
+      "split": "order",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "将这句报错改写为礼貌易懂的中文界面文案，不分析代码：TypeError: unsupported operand type(s).",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "probe_text",
+            "model": "synthetic/beta",
+            "revision": "probe-v1",
+            "capabilities": [
+              "文本翻译与写作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-text",
+                "source": "configured",
+                "summary": "合成测试资料：专长为中英文翻译、中文文案、叙事写作、改写和语气润色，包括技术文本的语言转换；不能实现或调试程序，也不保证算术或数学证明正确。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_data",
+            "model": "synthetic/gamma",
+            "revision": "probe-v1",
+            "capabilities": [
+              "结构化提取",
+              "数学推理"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-data",
+                "source": "configured",
+                "summary": "合成测试资料：专长为从给定文本逐字提取字段、输出严格JSON、表格统计、数学计算和严谨证明；可以理解给定数据，不支持写程序、排查代码错误或文学创作。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_code",
+            "model": "synthetic/alpha",
+            "revision": "probe-v1",
+            "capabilities": [
+              "Python编程"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-code",
+                "source": "configured",
+                "summary": "合成测试资料：专长为Python函数实现、错误修复、单元测试和复杂度分析；可分析程序逻辑。明确不提供中英文文学创作、自然语言翻译或纯数学证明。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "strict_winner": "probe_text",
+        "same_as": "order-0",
+        "same_prediction": true
+      }
+    },
+    {
+      "id": "order-4",
+      "split": "order",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "将这句报错改写为礼貌易懂的中文界面文案，不分析代码：TypeError: unsupported operand type(s).",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "probe_data",
+            "model": "synthetic/gamma",
+            "revision": "probe-v1",
+            "capabilities": [
+              "结构化提取",
+              "数学推理"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-data",
+                "source": "configured",
+                "summary": "合成测试资料：专长为从给定文本逐字提取字段、输出严格JSON、表格统计、数学计算和严谨证明；可以理解给定数据，不支持写程序、排查代码错误或文学创作。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_code",
+            "model": "synthetic/alpha",
+            "revision": "probe-v1",
+            "capabilities": [
+              "Python编程"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-code",
+                "source": "configured",
+                "summary": "合成测试资料：专长为Python函数实现、错误修复、单元测试和复杂度分析；可分析程序逻辑。明确不提供中英文文学创作、自然语言翻译或纯数学证明。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_text",
+            "model": "synthetic/beta",
+            "revision": "probe-v1",
+            "capabilities": [
+              "文本翻译与写作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-text",
+                "source": "configured",
+                "summary": "合成测试资料：专长为中英文翻译、中文文案、叙事写作、改写和语气润色，包括技术文本的语言转换；不能实现或调试程序，也不保证算术或数学证明正确。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "strict_winner": "probe_text",
+        "same_as": "order-0",
+        "same_prediction": true
+      }
+    },
+    {
+      "id": "order-5",
+      "split": "order",
+      "request": {
+        "schema_version": "1",
+        "task": {
+          "text": "将这句报错改写为礼貌易懂的中文界面文案，不分析代码：TypeError: unsupported operand type(s).",
+          "requirements": []
+        },
+        "eligible_candidates": [
+          {
+            "candidate_id": "probe_data",
+            "model": "synthetic/gamma",
+            "revision": "probe-v1",
+            "capabilities": [
+              "结构化提取",
+              "数学推理"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-data",
+                "source": "configured",
+                "summary": "合成测试资料：专长为从给定文本逐字提取字段、输出严格JSON、表格统计、数学计算和严谨证明；可以理解给定数据，不支持写程序、排查代码错误或文学创作。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_text",
+            "model": "synthetic/beta",
+            "revision": "probe-v1",
+            "capabilities": [
+              "文本翻译与写作"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-text",
+                "source": "configured",
+                "summary": "合成测试资料：专长为中英文翻译、中文文案、叙事写作、改写和语气润色，包括技术文本的语言转换；不能实现或调试程序，也不保证算术或数学证明正确。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          },
+          {
+            "candidate_id": "probe_code",
+            "model": "synthetic/alpha",
+            "revision": "probe-v1",
+            "capabilities": [
+              "Python编程"
+            ],
+            "evidence": [
+              {
+                "evidence_id": "ev-code",
+                "source": "configured",
+                "summary": "合成测试资料：专长为Python函数实现、错误修复、单元测试和复杂度分析；可分析程序逻辑。明确不提供中英文文学创作、自然语言翻译或纯数学证明。此合成候选仅支持上述明确声明的操作，其他操作均不支持。"
+              }
+            ]
+          }
+        ],
+        "relevant_preferences": []
+      },
+      "expect": {
+        "strict_winner": "probe_text",
+        "same_as": "order-0",
+        "same_prediction": true
+      }
+    }
+  ]
+}

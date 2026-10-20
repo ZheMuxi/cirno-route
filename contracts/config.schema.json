@@ -1,0 +1,87 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "runtime_url": {
+      "default": "http://127.0.0.1:18080",
+      "title": "Runtime Url",
+      "type": "string"
+    },
+    "model": {
+      "default": "cirno-gemma-e4b",
+      "title": "Model",
+      "type": "string"
+    },
+    "checkpoint": {
+      "default": "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:Q4_K_M",
+      "title": "Checkpoint",
+      "type": "string"
+    },
+    "runtime_token_file": {
+      "default": ".runtime/llama.token",
+      "title": "Runtime Token File",
+      "type": "string"
+    },
+    "api_token_file": {
+      "default": ".runtime/api.token",
+      "title": "Api Token File",
+      "type": "string"
+    },
+    "timeout_seconds": {
+      "default": 90.0,
+      "exclusiveMinimum": 0,
+      "maximum": 300,
+      "title": "Timeout Seconds",
+      "type": "number"
+    },
+    "max_output_tokens": {
+      "default": 1536,
+      "maximum": 4096,
+      "minimum": 256,
+      "title": "Max Output Tokens",
+      "type": "integer"
+    },
+    "context_tokens": {
+      "default": 8192,
+      "maximum": 32768,
+      "minimum": 4096,
+      "title": "Context Tokens",
+      "type": "integer"
+    },
+    "max_input_bytes": {
+      "default": 10000,
+      "maximum": 100000,
+      "minimum": 256,
+      "title": "Max Input Bytes",
+      "type": "integer"
+    },
+    "format_retries": {
+      "default": 1,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Format Retries",
+      "type": "integer"
+    },
+    "fallback_order": {
+      "items": {
+        "maxLength": 100,
+        "minLength": 1,
+        "pattern": "^[a-zA-Z0-9_.:-]+$",
+        "type": "string"
+      },
+      "title": "Fallback Order",
+      "type": "array"
+    },
+    "lock_file": {
+      "default": ".runtime/model-lock.json",
+      "title": "Lock File",
+      "type": "string"
+    }
+  },
+  "title": "Settings",
+  "type": "object"
+}

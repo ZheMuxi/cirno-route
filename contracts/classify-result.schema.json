@@ -1,0 +1,183 @@
+{
+  "$defs": {
+    "CandidatePrediction": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "^[a-zA-Z0-9_.:-]+$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "quality_level": {
+          "anyOf": [
+            {
+              "maximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Quality Level"
+        },
+        "preference_fit_level": {
+          "anyOf": [
+            {
+              "maximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Preference Fit Level"
+        },
+        "uncertainty": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ],
+          "title": "Uncertainty",
+          "type": "string"
+        },
+        "evidence_ids": {
+          "items": {
+            "maxLength": 100,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_.:-]+$",
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Evidence Ids",
+          "type": "array"
+        },
+        "reason_codes": {
+          "items": {
+            "enum": [
+              "TASK_MATCH",
+              "PREFERENCE_MATCH",
+              "OBSERVED_PERFORMANCE",
+              "CAPABILITY_LIMIT",
+              "EVIDENCE_INSUFFICIENT"
+            ],
+            "type": "string"
+          },
+          "maxItems": 5,
+          "minItems": 1,
+          "title": "Reason Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "quality_level",
+        "preference_fit_level",
+        "uncertainty",
+        "evidence_ids",
+        "reason_codes"
+      ],
+      "title": "CandidatePrediction",
+      "type": "object"
+    },
+    "RouterPrediction": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": "1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "abstain"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/CandidatePrediction"
+          },
+          "maxItems": 8,
+          "title": "Candidates",
+          "type": "array"
+        }
+      },
+      "required": [
+        "schema_version",
+        "status",
+        "candidates"
+      ],
+      "title": "RouterPrediction",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "abstain",
+        "blocked"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "gemma",
+        "rules"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "prediction": {
+      "$ref": "#/$defs/RouterPrediction"
+    },
+    "fallback_candidate_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Fallback Candidate Id"
+    },
+    "reason_codes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Reason Codes",
+      "type": "array"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "status",
+    "source",
+    "prediction",
+    "reason_codes",
+    "metadata"
+  ],
+  "title": "ClassificationResult",
+  "type": "object"
+}

@@ -1,0 +1,16 @@
+.venv/
+.runtime/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+.env
+dist/
+*.egg-info/
+.DS_Store
+node_modules
+.env.*
+!.env.example
+*.token
+*.gguf
+*.gguf.part

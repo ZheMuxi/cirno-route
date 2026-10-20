@@ -1,0 +1,15 @@
+{
+  "schema_version": "1",
+  "runtime_url": "http://127.0.0.1:18080",
+  "model": "cirno-gemma-e4b",
+  "checkpoint": "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:Q4_K_M",
+  "context_tokens": 8192,
+  "max_output_tokens": 1536,
+  "timeout_seconds": 90.0,
+  "max_input_bytes": 10000,
+  "format_retries": 1,
+  "fallback_order": ["demo_general", "demo_code", "demo_writer"],
+  "lock_file": ".runtime/model-lock.json",
+  "runtime_token_file": ".runtime/llama.token",
+  "api_token_file": ".runtime/api.token"
+}

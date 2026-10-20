@@ -1,0 +1,12 @@
+{
+  "name": "cirno-route-pi-classifier",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "pi": { "extensions": ["./index.ts"] },
+  "scripts": { "test": "node --test core.test.mjs extension.test.mjs local-backend.test.mjs" },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0"
+  }
+}
