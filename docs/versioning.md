@@ -1,6 +1,6 @@
 # 版本管理与回退
 
-仓库：https://github.com/ZheMuxi/cirno-route （私有）。
+仓库：[ZheMuxi/cirno-route](https://github.com/ZheMuxi/cirno-route)。
 
 ## 提交授权
 
@@ -11,6 +11,7 @@
 ## 当前版本
 
 - `v0.2.0`：当前版本，包含能力研究、V2 紧凑分批分类、价格偏好与 Pi 实际路由。变更、验证及限制见 [版本说明](../releases/v0.2.0.md)。
+- `docs-v0.2.0-public-readme`：公开仓库的通用 README 文档快照，功能版本仍为 0.2.0；原功能发布标签保持不变。
 - `v0.1.1`：前一版 V2 单次分类实现，是本次发布的回退目标。与当前版本共用提示词 `router-system-v2.txt`，SHA-256 为 `6fed39a057ef5e90be1f0be0a213ec900c6b8a698c2d520c8773613b3895d266`。
 - `v0.1.0-v3-baseline`：切换前的 V3 完整源码快照，保留用于回退和比较。
 - Python 项目、模块与 Pi 插件共同使用项目版本；提示词 V2/V3 独立编号。发布标签固定，后续修复另发新版本。

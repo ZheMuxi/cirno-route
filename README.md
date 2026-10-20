@@ -1,169 +1,205 @@
-# CirnoRoute · 本地模型分类器
+# CirnoRoute · 本地模型分类与 Pi 自动路由
 
-当前实现设计文档中的 **RouterPredictor** 和 Pi 可选的自动路由：本地 Gemma 根据任务和候选资料，输出每个候选的质量适配等级、可选表达偏好适配等级、证据引用和弃权状态。提供独立 CLI、Python 接口、带令牌的本地 HTTP API，以及 Pi 1.2.0 扩展。
+CirnoRoute 使用本地 Gemma 4 E4B 分析任务与候选模型资料，再结合用户明确选择的价格偏好，为 Pi 选择回答模型。也可以单独使用 CLI、Python 接口或本地 HTTP API，只获取分类结果。
 
-分类器本身不执行用户任务，不调用候选模型。Pi 扩展仅在 `/classify` 显示各候选分数；开启 `/bakarouter` 后，普通对话按任务能力与价格偏好自动选择回答模型，每次回答显示实际使用的 provider/model。`/classify` 仍不切换模型或执行任务。完整 PolicyEngine、费用预算、习惯偏好提取、Jev、微调和实验平台不在本阶段范围内。`fallback_candidate_id` 不用于自动路由。开关及失败处理见 [自动路由](docs/automatic-routing.md)。
+当前版本 **v0.2.0**，分类规则使用 **V2**。项目仍处于实验阶段，能力等级不是成功率，价格比较也不等于实际账单。本阶段不包含用户习惯学习、用户画像、微调或消费预算管理。
 
-v0.2.0 新增：Pi 首次分类前使用可配置的研究模型（默认 DeepSeek-V4.1-Flash，API ID `deepseek-flash`）联网整理全部可用候选的能力资料，缓存后由本地 Gemma V2 分批评分。用户可通过 `/bakamodels refresh` 主动重新查询，通过 `/bakamodels` 查看缓存。研究阶段只发送模型标识，不发送分类任务。详见 [联网能力资料](docs/capability-research.md)。
+## 主要功能
 
-价格偏好：使用 `/bakaprice` 菜单，或直接输入 `/bakaprice 希望便宜`、`/bakaprice 均衡`、`/bakaprice 接受昂贵`。默认均衡，设置跨重启保留。Gemma 完成能力评分后，本地程序结合价格推荐模型；接受昂贵档优先能力，同分取已知价格更高者。价格不增加 Gemma 上下文。初始填入 8 个模型的官方标准价/网关参考价，其他价格保持未知；配置及选择规则见 [模型价格](docs/model-pricing.md)。
+- **本地分类**：保留任务、能力依据和全部候选，使用紧凑协议分批评分；资料不足的候选保留未知状态。
+- **能力资料查询**：分类前查询并缓存候选模型的公开能力资料；支持更换研究模型和手动刷新。
+- **价格偏好**：希望便宜、均衡、接受昂贵。价格在分类完成后由程序处理，不增加 Gemma 的推理上下文。
+- **Pi 自动路由**：开启后根据能力与价格选模回答；普通对话隐藏评分，显示实际回答模型。
+- **独立分类**：`/classify` 只显示评分与推荐，不切换模型，也不执行任务。
+- **后台管理**：Pi 扩展按需准备模型与 llama.cpp，并管理自己启动的后台进程。
 
-## 本机部署
+## 环境要求
 
-源码：`/Users/zhemuxi/CirnoRoute/cirno-route`。Pi 1.2.0 独立安装在 `/Users/zhemuxi/CirnoRoute/Pi`。
+| 组件 | 要求 |
+| --- | --- |
+| Python | 3.12 或更高版本 |
+| Python 依赖管理 | uv |
+| Node.js | 22.19.0 或更高版本，附带 npm |
+| Git | 用于克隆与切换版本 |
+| Pi | 安装脚本按锁文件安装 1.2.0 |
+| 本地推理 | 固定版本的 llama.cpp 与 Gemma GGUF，支持检测、复用和下载 |
+| 执行模型 | 用户自行提供可用的 API 服务、模型配置和凭据 |
+| 联网研究 | 默认使用 DeepSeek 搜索与研究接口，需要相应凭据和网络连接 |
 
-使用已有 llama.cpp `b10516-b95502ba9` 和现有缓存：
+目前 llama.cpp 自动下载清单提供 **macOS arm64 / x64** 安装包，真实本地推理主要在 Apple Silicon 上验证。其他平台需要自行准备匹配的运行时，尚未完整验证；下面的启动脚本使用 POSIX shell。
+
+默认权重为 `HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:Q4_K_M`，约 5.34 GB。这是 Gemma 的衍生权重，不是 Google 官方原始 checkpoint。下载版本与 SHA-256 固定在 [运行时清单](src/cirno_route/resources/local-runtime-v1.json)，另需预留运行时、缓存及推理内存。
+
+## 安装
+
+选择任意有写权限的工作目录。当前 Pi 启动入口依赖以下相邻目录结构，请保留源码目录名 `cirno-route`：
 
 ```text
-HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:Q4_K_M
+workspace/
+├── cirno-route/    # 本仓库
+└── Pi/            # 安装脚本创建，保存 Pi 及本机配置
 ```
 
-这是用户指定的 Gemma 4 E4B 衍生权重，不标为 Google 官方原始 checkpoint。本阶段不改动权重。GGUF SHA-256、实际缓存路径、模板哈希、运行时 build 和上下文大小记录在 `.runtime/model-lock.json`。
-
-## 快速开始
-
-在项目目录运行，要求 Python 3.12+、uv 和已有 llama.cpp 缓存：
-
 ```bash
-cd /Users/zhemuxi/CirnoRoute/cirno-route
+mkdir -p workspace
+cd workspace
+git clone https://github.com/ZheMuxi/cirno-route.git
+cd cirno-route
 uv sync --frozen --python 3.12
+./scripts/install-pi.sh
 .venv/bin/cirno-route init
-./scripts/start-llama.sh
 ```
 
-上面终端保持运行；另开终端执行：
+`install-pi.sh` 将 Pi 安装到 `../Pi`，已有配置和会话会保留。首次安装会复制不含密钥的模型配置模板。`init` 只生成本地服务令牌，不下载模型、不生成供应商 API 密钥。
+
+## 配置自己的模型服务
+
+仓库不包含模型网关或供应商账户。默认配置是一个可调整的示例，不能直接假定其中的模型在你的服务中可用。
+
+| 配置文件 | 需要配置的内容 |
+| --- | --- |
+| `../Pi/.state/models.json` | Pi 执行模型的 provider、模型 ID、API 类型、服务地址及凭据引用；模板见 [models.example.json](tooling/pi/models.example.json) |
+| `config/pi-classifier.json` | 候选来源、网关地址、分批上限及价格配置路径 |
+| `config.json` | 本地分类设置、研究模型、搜索接口及凭据来源 |
+| `config/model-prices.json` | 按完整 `provider/model` 配置价格、来源和有效期 |
+
+### 执行模型与网关
+
+默认 provider `cirno-gateway` 使用回环地址 `http://127.0.0.1:8045/v1`。这是配置示例，不是项目提供的服务；使用时需自行运行兼容网关，并将 Pi 的 `baseUrl` 与分类配置的 `gateway_url` 改为同一个实际地址。当前网关目录检查仅接受字面回环 HTTP 地址，支持 `127.0.0.1` 或 `[::1]`。
+
+将实际网关模型 ID 填入 Pi 配置。分类时，这个 provider 的候选会与网关 `/models` 返回的列表求交集。其他供应商可以作为独立 provider 配置到 Pi，相关认证由 Pi 管理。
+
+启动脚本默认选择 `cirno-gateway/claude-sonnet-4-6`。如果服务没有此模型，应使用你实际配置的模型启动，例如：
 
 ```bash
-cd /Users/zhemuxi/CirnoRoute/cirno-route
-# 首次运行或明确更新模型/运行时后执行；计算约 5.3 GB 权重哈希并验证模板和 JSON 约束。
-.venv/bin/cirno-route lock-model
-.venv/bin/cirno-route classify examples/coding.json
+./scripts/start-pi.sh --model your-provider/your-model
 ```
 
-`start-llama.sh` 使用 `--offline`，不会下载模型，保持 `--no-mmproj --jinja -c 8192 -ngl all --reasoning off`，绑定 `127.0.0.1:18080`。不支持从未验证的远端 OpenAI 兼容接口调用模型。已有相同端口的服务时直接复用，不要重复启动；本项目不会自动终止其他服务。
+按默认启动脚本接入时，需要将网关密钥保存在 `.runtime/gateway.token`。该文件的内容是单行密钥，启动时注入环境变量；不要把真实密钥直接写进受 Git 跟踪的 JSON 或脚本。
 
-模型输出示意：
+### 联网能力研究
 
-```json
-{
-  "status": "ok",
-  "source": "gemma",
-  "prediction": {
-    "schema_version": "1",
-    "status": "ok",
-    "candidates": [{
-      "candidate_id": "demo_code",
-      "quality_level": 4,
-      "preference_fit_level": null,
-      "uncertainty": "medium",
-      "evidence_ids": ["code-config-v1"],
-      "reason_codes": ["TASK_MATCH"]
-    }]
-  }
-}
+默认研究模型 ID 为 `deepseek-flash`。模型整理与搜索分别配置，可调整 `config.json` 中的 `capability_research`，详见 [能力资料查询](docs/capability-research.md)。
+
+默认配置从环境变量 `DEEPSEEK_API_KEY` 读取凭据，也可以从 `../Pi/.state/deepseek.token` 读取。更换研究模型时，应分别核对模型接口与搜索接口的凭据；执行模型的认证与研究模型的认证也需要各自配置。
+
+建议通过不回显输入保存密钥，避免把值写入命令历史。以下示例供首次配置时手动运行，会写入对应本机文件：
+
+```bash
+.venv/bin/python - <<'PYKEYS'
+import getpass
+from pathlib import Path
+
+for label, filename in [
+    ("Gateway API key: ", ".runtime/gateway.token"),
+    ("DeepSeek research/search API key: ", "../Pi/.state/deepseek.token"),
+]:
+    key = getpass.getpass(label).strip()
+    if not key:
+        raise SystemExit("Empty key; configuration stopped.")
+    path = Path(filename)
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.touch(mode=0o600, exist_ok=True)
+    path.chmod(0o600)
+    path.write_text(key + "\n")
+PYKEYS
 ```
 
-这里只节选一个候选；真实响应包含全部输入候选以及 metadata。0–4 是待验证的适配等级，不是成功率。`uncertainty` 是模型自述类别，不是校准置信度。
+不使用联网研究时，可将 `candidate_source` 改为 `configured`，自行维护 `config/pi-classifier.json` 中的候选与证据，并关闭 `capability_research.enabled`。此模式只使用配置中的候选，不会研究完整 Pi 模型目录。
 
-## 输入与候选资料
+## 启动与使用
 
-完整例子见 [`examples/coding.json`](examples/coding.json)，合同见 `contracts/`。示例的三个 `demo_*` 候选均为**合成演示资料**，没有对应真实执行配置和实测成功率。投入真实选模前，需要填入实际候选和独立获得的资料。
+完成配置后，在仓库根目录启动：
 
-- `task.text`：待分析任务；`requirements`：本轮明确要求；`task_type` 可省略。
-- `eligible_candidates`：由受信调用方预先过滤的候选集合。本模块不实现隐私、健康、认证、费用或工具能力过滤。
-- 每个候选提供 `candidate_id/model/revision/capabilities/evidence`。资料 ID 必须唯一，`configured` 与 `measured` 分开；实测资料必须提供正整数 `sample_count`。
-- `relevant_preferences` 默认空，仅接受调用方已经验证、与当前任务有关的表达要求；不读写用户档案，不实现偏好更新。
-- 数据里的指令只作为待分析内容。固定 system 提示词与动态 user JSON 分离；生成 Schema 限定候选自己的证据、资料类型和空偏好字段；字段和引用仍会经过程序校验。
+```bash
+./scripts/start-pi.sh
+```
 
-独立 V2 接口在任一候选完全缺少 evidence 时返回 `UNSUPPORTED_BY_ROUTER`，所有分数未知。不凭模型名编造分数。项目配置允许每次本地请求 30,000 UTF-8 字节、最多 8 个候选；实际发送前通过 llama.cpp 渲染模板并计算 token，超出上下文预算则阻断，不静默截断。Pi 目录流程保留全部候选，有依据候选分批，未知型号直接保留弃权；超出实际 token 预算的批次会继续二分。
+保持上述目录结构时，也可使用 `../Pi/pi-classifier`。首次有效分类会检测并准备 Gemma 和 llama.cpp；**使用 Pi 插件时，不需要另开终端启动本地分类服务**。后续分类复用后台进程，退出或重载 Pi 时回收插件自己启动的进程。
 
-当前启用紧凑传输：保留 V2 评分规则，缩短内部 ID、去除重复说明和冗长输出字段，恢复完整结果后仍执行原有校验。任务、能力依据及限制不截断。开关与本机对照结果见 [分类提速](docs/classifier-speed.md)。
+| Pi 命令 | 行为 |
+| --- | --- |
+| `/classify 任务内容` | 只分类，查看全部候选的评分和推荐 |
+| `/bakamodels` | 查看能力资料与缓存状态 |
+| `/bakamodels refresh` | 主动重新联网查询模型能力 |
+| `/bakaprice 希望便宜` | 在能力达标的候选中优先低价 |
+| `/bakaprice 均衡` | 能力差距较小且节省明显时选择便宜模型 |
+| `/bakaprice 接受昂贵` | 优先能力，同分选择已知价格更高的模型 |
+| `/bakaprice status` | 查看当前价格偏好 |
+| `/bakarouter` | 开启普通输入的自动选模与回答 |
+| `/bakarouter off` | 关闭自动路由，保留当前模型 |
 
-当前默认使用 **V2 评分流程，每批独立分类**，提示词在 [`router-system-v2.txt`](src/cirno_route/resources/router-system-v2.txt)，V1 保留用于对照。V3 的四份提示词及多阶段分类代码已从当前版本删除，可通过 Git 标签 `v0.1.0-v3-baseline` 找回。V2 仍存在资料不足时未弃权、候选换序时评分波动的已知问题，详见 [V2 评测记录](docs/prompt-evaluation.md) 和 [紧凑格式复测](docs/classifier-speed.md)。修改后在 Pi 中执行 `/reload` 或重启 Pi；自动分类需要重新输入 `/bakarouter` 开启。独立 CLI 下次启动生效，已运行的 HTTP 分类服务需要重启。
+自动路由每次启动默认关闭，价格偏好跨重启保留。每轮用户输入只选一次模型，工具续传沿用该模型。关闭自动路由后可用 Pi 的 `/model` 手动更换模型。修改扩展后重启 Pi 或 `/reload`，然后按需再次开启路由。
 
-## 版本管理
+## 独立 CLI 与本地 HTTP API
 
-私有仓库：[ZheMuxi/cirno-route](https://github.com/ZheMuxi/cirno-route)。当前项目版本 `0.2.0`，分类提示词版本 V2，两者独立编号。本版新增能力研究、紧凑分类、三档价格偏好与 Pi 实际路由，详见 [v0.2.0 版本说明](releases/v0.2.0.md)。提交、发布及安全回退步骤见 [版本与回退政策](docs/versioning.md)，历次变更见 [CHANGELOG.md](CHANGELOG.md)。
-
-Pi 的依赖锁文件、启动入口和不含密钥的模型配置模板在 `tooling/pi/`。新克隆或切换依赖版本后，执行 `./scripts/install-pi.sh`，安装到相邻的 `../Pi`。已有 Pi 配置与会话保留；密钥仍放本地 `.runtime/`，不会上传。
-
-## 失败与规则基线
+无需 Pi 即可先运行规则基线，检查输入输出格式；此命令不启动模型：
 
 ```bash
 .venv/bin/cirno-route classify examples/coding.json --rules
-cat examples/coding.json | .venv/bin/cirno-route classify -
 ```
 
-`--rules` 不需要运行模型。回退采用 `config.json` 的 `fallback_order`，只取当前候选与该配置的交集中的第一个；没有交集则返回 null。规则路径不编造等级，统一 `status=abstain/source=rules`。
-
-- 空候选集合返回 `blocked/NO_ELIGIBLE_MODEL`。
-- 超时、离线、格式错误或模型/模板/build 不一致返回弃权及固定错误码。
-- 格式/语义错误最多重试一次；网络错误不自动重试。整个分类调用有总时间限制。
-- 未知 usage 为 null。只记录请求 ID、哈希、版本、耗时、尝试次数、实际报告的 token 数和错误码；默认不持久化任务正文或生成文本。
-- CLI 正常预测或弃权退出码 0，阻断 2，输入/配置错误 1；自动化使用者应同时检查 JSON 状态和 source。
-
-## 本地 API
+若要独立使用真实 Gemma 分类，需要先准备与 [运行时清单](src/cirno_route/resources/local-runtime-v1.json) 匹配的 `llama-server` 和权重缓存。下面的手动启动脚本使用 `--offline`，不会负责首次下载：
 
 ```bash
+# 终端 1：在仓库根目录启动 llama.cpp
+./scripts/start-llama.sh
+```
+
+```bash
+# 终端 2：同样在仓库根目录；首次使用或更新运行时后重新锁定
+.venv/bin/cirno-route lock-model
+.venv/bin/cirno-route classify examples/coding.json
+# 可选：启动本地 HTTP 分类 API
 ./scripts/start-api.sh
 ```
 
-绑定 `127.0.0.1:18081`。所有路径（包括健康检查和文档）都需要 `Authorization: Bearer <token>`；令牌由 init 生成，位于 `.runtime/api.token`，权限 0600。llama.cpp 使用独立 `.runtime/llama.token`。令牌不输出到日志。
+默认 llama.cpp 地址为 `127.0.0.1:18080`，HTTP 分类 API 为 `127.0.0.1:18081`。已存在兼容服务时不要重复占用同一端口。
 
-可用以下 Python 示例调用，不把令牌写进 shell 历史：
+API 的所有路径均需要 `Authorization: Bearer <token>`，分类 API 令牌由 `init` 保存在 `.runtime/api.token`，llama.cpp 使用独立的 `.runtime/llama.token`。`POST /v1/classify` 接受与 CLI 相同的 JSON 输入；`GET /health` 仅表示进程存活。这个 API 只分类，不执行任务。
 
-```bash
-.venv/bin/python - <<'PY'
-from pathlib import Path
-import httpx
-headers = {'Authorization': 'Bearer ' + Path('.runtime/api.token').read_text().strip(),
-           'Content-Type': 'application/json'}
-with httpx.Client(trust_env=False, timeout=100) as client:
-    response = client.post('http://127.0.0.1:18081/v1/classify', headers=headers,
-                           content=Path('examples/coding.json').read_bytes())
-    print(response.status_code, response.json())
-PY
-```
+## 输入、输出与限制
 
-`GET /health` 是进程存活检查，不代表模型已就绪；每次分类都会校验实际运行时。`POST /v1/classify` 返回 200（预测/弃权）、409（blocked）、401（无有效令牌）、413（请求过大）、415（非 JSON）、422（输入不合规）、429（分类器忙）。此阶段不提供设计文档中的 `/v1/route/decide`，以免混淆分类和执行授权。
+输入示例见 [examples/coding.json](examples/coding.json)，结构定义见 [contracts/](contracts/)。示例中的 `demo_*` 候选是合成资料，不是已配置的真实执行模型。
 
-## Pi
+- `task.text` 是当前任务，`requirements` 是本轮明确要求。
+- `eligible_candidates` 提供候选标识、能力及证据；候选 ID 和证据引用会经过校验。
+- `relevant_preferences` 默认空；不读取或更新用户习惯。
+- 输出包含候选质量等级、证据引用、不确定性类别及弃权状态。质量等级 0–4 不是任务成功概率。
+- 独立请求最多 8 个候选；Pi 目录按批次处理，实际 token 预算不足时继续拆分，不静默删候选或截断资料。
+- 价格按固定工作量比较，并区分官方价、网关参考价、未知及过期价格；不估算整轮实际账单。
 
-本地分类器已接入 Pi。启动、命令与真实测试结果见 [docs/pi-classifier.md](docs/pi-classifier.md)。本地模型由插件按需准备和启动，缺少 Gemma 权重或 llama.cpp 时自动下载；详见 [自动准备与生命周期](docs/pi-managed-runtime.md)。保持用户的8045网关可用，然后启动：
+V2 仍存在缺少必要任务资料却不弃权、评分区分度及顺序敏感等已知限制。联网资料也可能整理错误。首次联网准备、模型加载、分类和远端回答均会增加等待时间，不保证固定延迟。测试结果与限制见 [v0.2.0 版本说明](releases/v0.2.0.md)。
 
-```bash
-/Users/zhemuxi/CirnoRoute/Pi/pi-classifier
-```
+## 数据与凭据
 
-在 Pi 中输入 `/classify 用 Python 实现归并排序并编写测试`，即可只分类并查看所有候选分数。自动路由默认关闭；输入 `/bakarouter` 开启，输入 `/bakarouter off` 关闭。开启后，普通输入先分类并结合价格选模，再由选中模型回答，不显示各模型评分；无论开关状态，每次回答都会显示实际模型。关闭后保留当前模型，可用 `/model` 更换。新会话的启动默认模型仍为 `cirno-gateway/claude-sonnet-4-6`。
+- 用户任务在本地 Gemma 中分类；能力研究只发送模型标识，不发送任务正文或会话。
+- 开启实际路由后，Pi 会把执行任务及相应会话上下文发送给选中的回答模型。
+- `.runtime/` 保存本地令牌、模型锁、下载缓存、研究资料和运行日志；Pi 私有配置与会话位于仓库外的 `../Pi/.state/`。
+- 密钥、权重、会话及运行日志不应提交。仓库通过 `.gitignore` 排除 `.runtime/`、`*.token`、`*.gguf` 等本机文件；受版本管理的配置仅使用凭据引用。
 
-`config/pi-classifier.json` 当前使用 `candidate_source: "pi"`，读取 Pi 完整可用目录；网关候选每次与8045目录求交集。`config.json` 的 `capability_research` 控制搜索、研究模型及缓存。研究记录在 `.runtime/model-capabilities/`，尚无本地成功率校准。将候选来源改为 `configured` 可恢复文件内原有三个候选。分类任务正文只发送到本地 Gemma，普通 Pi 对话仍通过当前执行模型处理。
+## 开发与验证
 
-Pi 独立安装在 `../Pi`，固定官方包 `@earendil-works/pi-coding-agent@1.2.0`，依赖由源码中的 `tooling/pi/package-lock.json` 锁定，安装脚本将其同步到该目录。配置和会话在 `Pi/.state/`；网关密钥保存在本项目 `.runtime/gateway.token`，启动时以环境变量提供。
-
-原来的 `/Users/zhemuxi/CirnoRoute/Pi/pi-local` 入口保留，用于直接把 Gemma 当执行模型。其早期测试见 [docs/pi-smoke.md](docs/pi-smoke.md)。
-
-## 验证
-
-本机结果见 [`docs/verification.md`](docs/verification.md)。
+安装依赖后，在仓库根目录运行：
 
 ```bash
 .venv/bin/pytest -q
 node --test packages/pi-extension/*.test.mjs
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
-# 明确调用本地模型的合成用例，报告写入被 Git 忽略的 .runtime/
-.venv/bin/python scripts/smoke.py
 ```
 
-自动化测试覆盖候选越界、证据伪造和跨候选引用、类型错误、无偏好时错误评分、缺资料弃权、空候选、重试上限、超时、模板和版本检查、输入过大、输出截断、HTTP 鉴权、重定向拒绝等。测试不下载模型。模型锁定还用冲突提示检查服务是否真正执行 JSON Schema，拒绝静默忽略约束的运行时。真实 smoke checks 只是连通性与基本行为检查，不证明路由准确率或成本收益。现有 GGUF 模板会触发 llama.cpp 的旧模板兼容提示，实际 system 渲染已在 lock-model 中检查；升级运行时后需重新验证和锁定。
+自动化测试不下载模型，GitHub CI 运行上述检查。真实模型评测与 Pi 集成脚本需要额外的本机运行时和服务凭据；结果仅用于检验对应场景，不能当作普遍的质量或成本保证。
 
-## 实现范围与信任边界
+## 文档与版本
 
-代码结构：`contracts.py` 数据合同；`runtime.py` llama.cpp 适配；`validation.py` 严格解析和引用验证；`classifier.py` 分类/弃权流程；`cli.py`/`api.py` 入口；`resources/` 固定提示词。
+- [模型能力查询](docs/capability-research.md)
+- [分类提速与上下文压缩](docs/classifier-speed.md)
+- [模型价格与三档偏好](docs/model-pricing.md)
+- [Pi 自动路由与失败处理](docs/automatic-routing.md)
+- [本地模型自动准备及生命周期](docs/pi-managed-runtime.md)
+- [v0.2.0 版本说明](releases/v0.2.0.md)
+- [变更记录](CHANGELOG.md)
+- [版本管理与回退](docs/versioning.md)
 
-本机受信单用户、受信 llama.cpp 进程。执行 lock-model 时计算完整权重哈希，调用前后比较文件大小/mtime、模型 ID、模板哈希与 build；这不是防御同权限恶意进程篡改文件的沙箱。模型的语义判断仍可能出错，合法 JSON 也不保证判断正确。本地推理适配器不允许联网地址、代理继承或重定向；新增的公开模型资料研究模块明确使用远程搜索和整理接口，不提供整个 Pi/工具进程的网络隔离保证。
-
-运行数据和密钥都在项目 `.runtime/`，与 iCloud 笔记目录分开。`.gitignore` 排除环境、令牌、日志、缓存和本地运行报告。模型复用原缓存，不复制到源码。
-
-官方接口参考：[Pi 安装](https://pi.dev/docs/latest/quickstart)、[llama.cpp 服务](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md)、[Gemma 4 提示词格式](https://ai.google.dev/gemma/docs/core/prompt-formatting-gemma4)。
+仓库：[ZheMuxi/cirno-route](https://github.com/ZheMuxi/cirno-route)。项目版本与提示词版本独立编号；固定发布标签保留源码、提示词和依赖版本，可用于回退。部分专题文档记录早期环境下的实测过程，新安装请以本页的通用流程为准。
