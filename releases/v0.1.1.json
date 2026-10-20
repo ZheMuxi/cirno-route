@@ -1,0 +1,432 @@
+{
+  "release": "v0.1.1",
+  "date": "2026-10-20",
+  "source_ref": "refs/tags/v0.1.1",
+  "baseline_ref": "refs/tags/v0.1.0-v3-baseline",
+  "scope": "Classification only. No user habit adaptation or automatic execution-model selection.",
+  "prompt_version": "router-system-v2",
+  "pipeline_version": "v2",
+  "schema_version": "1",
+  "pi_version": "1.2.0",
+  "python_version": "3.12.11",
+  "uv_version": "0.12.5",
+  "runtime": {
+    "model": "cirno-gemma-e4b",
+    "checkpoint": "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:Q4_K_M",
+    "model_digest": "d0027dd3a9128d9323e9f282c8bf010a8526c46477584535991dc1a869b56e96",
+    "model_size": 5335285728,
+    "template_sha256": "55572b8d3c8342044e25874c73fe5234b661fa0a57a57f6ef75b58e03d7d959a",
+    "runtime_version": "b10516-b95502ba9",
+    "context_tokens": 8192
+  },
+  "inference": {
+    "thinking": "disabled",
+    "temperature": 0.0,
+    "seed": 42,
+    "max_output_tokens": 1536
+  },
+  "files_sha256": {
+    "config/pi-classifier.json": "009060ec7856fd7904282dbde3366e3e60becdc5523a95cc992ed6389ea998c7",
+    "config.json": "4f9b9d972531c3ae326c03fedb328062226f80c14f116c6ebfa91eca7826bd8c",
+    "contracts/classify-request.schema.json": "07520382ba878daad7548b199b444c2159f6e0b1e469ddaf332bdecaa77c8907",
+    "contracts/classify-result.schema.json": "8724889dfb460b00a9551d003ec83ea262579faa85c26538449bb953295c3938",
+    "contracts/config.schema.json": "b70a86d77a069fe51b1a486c540d575e3d95acbf1131b22e645f86535c3cf249",
+    "contracts/router-output.schema.json": "7d29a72150ffb21df241d7cad0487232a4dceb8b1909a506e36aa6801226d1f1",
+    "evals/prompt-cases/task-fit-v1.json": "05d7a3e2d644e012412a1b1c09891bc57b69dc225f165ddc4ebaa9a78b1729b7",
+    "packages/pi-extension/core.mjs": "5e20a61ec10f0b3ef9a51e82d6a97ab9e1d1145ac469b8a02df795e7a719fcd5",
+    "packages/pi-extension/core.test.mjs": "c098bf76406de4aec46ba63d584f927ce9e4d2e68713d63053414030ee923f92",
+    "packages/pi-extension/extension.test.mjs": "14efcba7bddda165d39308afffa4ed9005a39be0bcdf84197b1d4a50993d199a",
+    "packages/pi-extension/index.ts": "d3ac183f365b4bc4a8fcbfa000b0d0c0be345c03d8a1d4bb64e44975a058c873",
+    "packages/pi-extension/local-backend.mjs": "12deeb1d8703938a6eaa41e3d67f7d609cecd9c534c56fd92de4d094d4e7a042",
+    "packages/pi-extension/local-backend.test.mjs": "f92a26f2bbceefa208d761160c83f082ad4a62de275249089a793ce91c00d16f",
+    "packages/pi-extension/package.json": "4e3dac1e27e339927d591f6db8eccc4a3054d9cc23f697f38bd167385193fe2d",
+    "pyproject.toml": "73bded97108b4bae65091ee7e879432d4b06e4ff5d8b16ab12fb9ee0f3818ace",
+    "src/cirno_route/.DS_Store": "d9ed1bb40cc18d904fe3b9e2950d9f0bf9d5b8dc07b494a35e37a4666b370b11",
+    "src/cirno_route/__init__.py": "aedd21e7cab6d8dd2e650b5e1340abb61c8965d195ef2f31db9995d52a0b5337",
+    "src/cirno_route/api.py": "db5b745ad6ed9fb4a7f147390a6ca3e444e0e5eaae733d9e61ff740b15a1c1ac",
+    "src/cirno_route/classifier.py": "f679e35f029a3989716ac3b4455cc2d1d4ab15512289d3dd04800badd5d68a41",
+    "src/cirno_route/cli.py": "57d7018dffeb5d48413f4ab8cbf8db9e772ba5542f8e1b2ca6a06921aefd2114",
+    "src/cirno_route/config.py": "a869231996f22fb48a27f9ea4a4aa680b123bef738c438444a2440d1663d21e7",
+    "src/cirno_route/contracts.py": "704ea2802e449e5ddd1ac0640f80e1594b6aba8c6d14d965819c1fc25cd3e6f6",
+    "src/cirno_route/errors.py": "68ea71df6c771c8b240b954cb993ae2ae76a1947fb0e39488125e6dc957e143d",
+    "src/cirno_route/provision.py": "aa871465de8ee2cc5e67b8cbfdcd27dd76c526b9804cf1359a327925497fba0e",
+    "src/cirno_route/resources/local-runtime-v1.json": "7553e4d2009eed459f4250e2b3c77e02ba6341d0b57bbab9ec4ec36eb9b2dd47",
+    "src/cirno_route/resources/router-system-v1.txt": "210580dc34d3bf3d4fd7b45227bfd6ed3b805747865cb133c59c06d89644cadf",
+    "src/cirno_route/resources/router-system-v2.txt": "6fed39a057ef5e90be1f0be0a213ec900c6b8a698c2d520c8773613b3895d266",
+    "src/cirno_route/runtime.py": "212cc3fba5fef1864f7ec319afd67323a5edf325a879f52495272be76a4ca4d8",
+    "src/cirno_route/validation.py": "6cdc40ab9713a5ce13d3d11b3342e1f0a1ff64ac514135a0bb708d521ab5bd92",
+    "src/cirno_route/worker.py": "ae1cf5bd5a22e5d45c8576a7af9fa901b2e0dcc88ef0ab803a4cf054e903c7f3",
+    "tooling/pi/models.example.json": "460769f855bdd2ff24cfb485316f1cccdcaa26d7ae82c2cd441726f5d99101b1",
+    "tooling/pi/package-lock.json": "10ce8107e449894a94f917d3e1b7d4150d392c2111b155a0c4e91f5df16377dd",
+    "tooling/pi/package.json": "872b1471bc90ab4b45c407fd8af2b98364bd6ef02a1d7bbabdbb819fa2ce7cc2",
+    "tooling/pi/pi": "6e81258a8810ec08c64bdb16cc3cbed76ea46ee9d73506f410e0215ea0e4c324",
+    "tooling/pi/pi-classifier": "da8ca274105385447ae16eba14d89f8c52eec485970226e55bec9617ec7f33f9",
+    "tooling/pi/pi-local": "900f6a6fad3eb9b82db533edd98bdd1c9c835f2be0ff4c5669e6ee84b1a4f4ce",
+    "uv.lock": "5acfbc817fc21a4ec35161e068d7e0e0e6de9d185ed1543e54f8dbffa234ab5f"
+  },
+  "validation": {
+    "python_tests": 71,
+    "node_tests": 24,
+    "ruff": "passed",
+    "frozen_dependency_install": "passed",
+    "pi_smoke": {
+      "passed": true,
+      "execution_calls": 0,
+      "cases": [
+        {
+          "status": "ok",
+          "source": "gemma",
+          "pipeline_version": "v2",
+          "prompt_sha256": "6fed39a057ef5e90be1f0be0a213ec900c6b8a698c2d520c8773613b3895d266",
+          "latency_ms": 14100.26,
+          "candidates": [
+            {
+              "candidate_id": "sonnet-4-6",
+              "quality_level": 4,
+              "preference_fit_level": null,
+              "uncertainty": "medium",
+              "evidence_ids": [
+                "sonnet-config-v1"
+              ],
+              "reason_codes": [
+                "TASK_MATCH",
+                "CAPABILITY_LIMIT"
+              ]
+            },
+            {
+              "candidate_id": "opus-4-6",
+              "quality_level": 4,
+              "preference_fit_level": null,
+              "uncertainty": "medium",
+              "evidence_ids": [
+                "opus-config-v1"
+              ],
+              "reason_codes": [
+                "TASK_MATCH",
+                "CAPABILITY_LIMIT"
+              ]
+            },
+            {
+              "candidate_id": "gemini-3-flash",
+              "quality_level": 4,
+              "preference_fit_level": null,
+              "uncertainty": "medium",
+              "evidence_ids": [
+                "flash-config-v1"
+              ],
+              "reason_codes": [
+                "TASK_MATCH",
+                "CAPABILITY_LIMIT"
+              ]
+            }
+          ]
+        },
+        {
+          "status": "ok",
+          "source": "gemma",
+          "pipeline_version": "v2",
+          "prompt_sha256": "6fed39a057ef5e90be1f0be0a213ec900c6b8a698c2d520c8773613b3895d266",
+          "latency_ms": 10851,
+          "candidates": [
+            {
+              "candidate_id": "opus-4-6",
+              "quality_level": 4,
+              "preference_fit_level": null,
+              "uncertainty": "medium",
+              "evidence_ids": [
+                "opus-config-v1"
+              ],
+              "reason_codes": [
+                "TASK_MATCH",
+                "EVIDENCE_INSUFFICIENT"
+              ]
+            },
+            {
+              "candidate_id": "sonnet-4-6",
+              "quality_level": 3,
+              "preference_fit_level": null,
+              "uncertainty": "medium",
+              "evidence_ids": [
+                "sonnet-config-v1"
+              ],
+              "reason_codes": [
+                "TASK_MATCH",
+                "EVIDENCE_INSUFFICIENT"
+              ]
+            },
+            {
+              "candidate_id": "gemini-3-flash",
+              "quality_level": 2,
+              "preference_fit_level": null,
+              "uncertainty": "medium",
+              "evidence_ids": [
+                "flash-config-v1"
+              ],
+              "reason_codes": [
+                "TASK_MATCH",
+                "CAPABILITY_LIMIT"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "gemma_regression": {
+      "fixture": "evals/prompt-cases/task-fit-v1.json",
+      "fixture_sha256": "05d7a3e2d644e012412a1b1c09891bc57b69dc225f165ddc4ebaa9a78b1729b7",
+      "passed": 14,
+      "total": 17,
+      "mean_latency_ms": 10305.97,
+      "format_retries": 0,
+      "cases": [
+        {
+          "id": "dev-code",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true
+          },
+          "scores": {
+            "probe_code": 4,
+            "probe_text": 2,
+            "probe_data": 1
+          }
+        },
+        {
+          "id": "dev-write",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true
+          },
+          "scores": {
+            "probe_code": 1,
+            "probe_text": 4,
+            "probe_data": 1
+          }
+        },
+        {
+          "id": "dev-extract",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true
+          },
+          "scores": {
+            "probe_code": 2,
+            "probe_text": 3,
+            "probe_data": 4
+          }
+        },
+        {
+          "id": "dev-keyword",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true
+          },
+          "scores": {
+            "probe_code": 2,
+            "probe_text": 4,
+            "probe_data": 1
+          }
+        },
+        {
+          "id": "dev-proof",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true
+          },
+          "scores": {
+            "probe_code": 2,
+            "probe_text": 1,
+            "probe_data": 4
+          }
+        },
+        {
+          "id": "dev-simple",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "equal_scores": true,
+            "no_insufficient": true
+          },
+          "scores": {
+            "sonnet-4-6": 4,
+            "opus-4-6": 4,
+            "gemini-3-flash": 4
+          }
+        },
+        {
+          "id": "dev-complex",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "opus-4-6>gemini-3-flash": true
+          },
+          "scores": {
+            "sonnet-4-6": 3,
+            "opus-4-6": 4,
+            "gemini-3-flash": 2
+          }
+        },
+        {
+          "id": "dev-unsupported",
+          "pass": false,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "all_unknown": false
+          },
+          "scores": {
+            "sonnet-4-6": 3,
+            "opus-4-6": 3,
+            "gemini-3-flash": 3
+          }
+        },
+        {
+          "id": "validation-code",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true
+          },
+          "scores": {
+            "probe_code": 4,
+            "probe_text": 2,
+            "probe_data": 1
+          }
+        },
+        {
+          "id": "validation-rewrite",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true
+          },
+          "scores": {
+            "probe_code": 2,
+            "probe_text": 4,
+            "probe_data": 1
+          }
+        },
+        {
+          "id": "validation-calc",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true
+          },
+          "scores": {
+            "probe_code": 2,
+            "probe_text": 1,
+            "probe_data": 4
+          }
+        },
+        {
+          "id": "validation-json",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true
+          },
+          "scores": {
+            "probe_code": 2,
+            "probe_text": 1,
+            "probe_data": 4
+          }
+        },
+        {
+          "id": "validation-injection",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true
+          },
+          "scores": {
+            "probe_code": 1,
+            "probe_text": 4,
+            "probe_data": 0
+          }
+        },
+        {
+          "id": "validation-explain",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "equal_scores": true,
+            "no_insufficient": true
+          },
+          "scores": {
+            "sonnet-4-6": 4,
+            "opus-4-6": 4,
+            "gemini-3-flash": 4
+          }
+        },
+        {
+          "id": "validation-unknown",
+          "pass": false,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "all_unknown": false
+          },
+          "scores": {
+            "sonnet-4-6": 3,
+            "opus-4-6": 4,
+            "gemini-3-flash": 2
+          }
+        },
+        {
+          "id": "validation-order",
+          "pass": false,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true,
+            "same_scores": false
+          },
+          "scores": {
+            "probe_data": 2,
+            "probe_text": 4,
+            "probe_code": 2
+          }
+        },
+        {
+          "id": "validation-brand",
+          "pass": true,
+          "checks": {
+            "gemma_contract": true,
+            "no_preferences": true,
+            "strict_winner": true,
+            "same_scores": true
+          },
+          "scores": {
+            "probe_code": 4,
+            "probe_text": 2,
+            "probe_data": 1
+          }
+        }
+      ]
+    }
+  },
+  "known_limitations": [
+    "Two missing-input cases still receive scores instead of abstaining.",
+    "Candidate order can change scores.",
+    "Scores and uncertainty are not calibrated task-success probabilities."
+  ]
+}

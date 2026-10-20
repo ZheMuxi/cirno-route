@@ -1,0 +1,84 @@
+{
+  "providers": {
+    "cirno-local": {
+      "baseUrl": "http://127.0.0.1:18080/v1",
+      "api": "openai-completions",
+      "apiKey": "CIRNO_LLAMA_API_KEY",
+      "models": [
+        {
+          "id": "cirno-gemma-e4b",
+          "name": "Local Gemma 4 E4B Q4_K_M",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 8192,
+          "maxTokens": 1536,
+          "samplingParams": {
+            "temperature": 0,
+            "seed": 42,
+            "chat_template_kwargs": {
+              "enable_thinking": false
+            },
+            "reasoning_effort": "none"
+          }
+        }
+      ]
+    },
+    "cirno-gateway": {
+      "baseUrl": "http://127.0.0.1:8045/v1",
+      "api": "openai-completions",
+      "apiKey": "CIRNO_GATEWAY_API_KEY",
+      "models": [
+        {
+          "id": "claude-sonnet-4-6",
+          "name": "Gateway Sonnet 4.6",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 32768,
+          "maxTokens": 2048,
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsStore": false,
+            "supportsReasoningEffort": false,
+            "maxTokensField": "max_tokens"
+          }
+        },
+        {
+          "id": "claude-opus-4-6",
+          "name": "Gateway Opus 4.6",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 32768,
+          "maxTokens": 2048,
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsStore": false,
+            "supportsReasoningEffort": false,
+            "maxTokensField": "max_tokens"
+          }
+        },
+        {
+          "id": "gemini-3-flash",
+          "name": "Gateway Gemini 3 Flash",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 32768,
+          "maxTokens": 2048,
+          "compat": {
+            "supportsDeveloperRole": false,
+            "supportsStore": false,
+            "supportsReasoningEffort": false,
+            "maxTokensField": "max_tokens"
+          }
+        }
+      ]
+    }
+  }
+}

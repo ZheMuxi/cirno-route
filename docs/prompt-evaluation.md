@@ -1,6 +1,6 @@
 # Gemma 分类提示词对比
 
-本文为 V2 历史记录。当前使用 V3，见 [V3 验证记录](prompt-evaluation-v3.md)。
+当前已恢复使用 V2。下文保留 2026-10-14 的历史评测，最新切换验证见 [版本与回退政策](versioning.md)。V3 已移出当前实现，历史记录见 [V3 归档](history/prompt-evaluation-v3.md)。
 
 验证日期：2026-10-14。仅评估本轮任务与候选资料的匹配，不读取历史会话、不提取或更新用户习惯，也不自动切换执行模型。
 
@@ -66,9 +66,9 @@
 
 已将生产 `PROMPT_VERSION` 切换至 `router-system-v2`。真实 Pi 加载扩展并完成两次 `/classify`：简单乘法为 Sonnet/Opus/Flash **4/4/4**，复杂缓存设计为 **3/4/2**。两次均来自本地 Gemma，提示词哈希与冻结新版一致，偏好分全部为空，没有执行模型回复。
 
-报告：`.runtime/pi-prompt-v2-report.json`。可运行 `.venv/bin/python scripts/pi-prompt-smoke.py` 复现；需要8045模型目录可用，任务正文只进入本地分类后台。脚本会更新该 Pi smoke 报告与对应日志。
+报告：`.runtime/pi-prompt-v2-report.json`。可运行 `.venv/bin/python scripts/pi-prompt-smoke.py` 复现；需要8045模型目录可用，任务正文只进入本地分类后台。现脚本使用带时间戳的新报告文件，不覆盖历史结果。
 
-当前 Python 自动化测试70项通过，Ruff 静态检查与格式检查通过。新测试覆盖评估提示词实例隔离及元数据与实际发送内容一致。
+当时 Python 自动化测试70项通过，Ruff 静态检查与格式检查通过。新测试覆盖评估提示词实例隔离及元数据与实际发送内容一致。
 
 已打开的 Pi 执行 `/reload` 或重启即可加载新版；普通输入自动分类仍需 `/bakarouter` 开启。独立 HTTP 分类服务如已运行，需要重启其 Python 进程。
 

@@ -113,7 +113,7 @@ async def run(args):
                 manager.runtime,
                 system_prompt=prompt,
                 prompt_version=f"router-system-{name}",
-                pipeline_version="v3" if name == "v3" else "v2",
+                pipeline_version="v2",
             )
             for name, prompt in prompts.items()
         }
@@ -168,6 +168,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--split", choices=("dev", "validation", "order", "all"), required=True)
     parser.add_argument("--output", required=True, help="New report file relative to project root")
-    parser.add_argument("--versions", nargs="+", choices=("v1", "v2", "v3"), default=["v1", "v2"])
+    parser.add_argument("--versions", nargs="+", choices=("v1", "v2"), default=["v1", "v2"])
     parser.add_argument("--fixture", default="evals/prompt-cases/task-fit-v1.json")
     asyncio.run(run(parser.parse_args()))

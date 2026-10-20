@@ -71,9 +71,15 @@ cd /Users/zhemuxi/CirnoRoute/cirno-route
 - `relevant_preferences` 默认空，仅接受调用方已经验证、与当前任务有关的表达要求；不读写用户档案，不实现偏好更新。
 - 数据里的指令只作为待分析内容。固定 system 提示词与动态 user JSON 分离；生成 Schema 限定候选自己的证据、资料类型和空偏好字段；字段和引用仍会经过程序校验。
 
-V3 对缺少 evidence 的候选给出未知分数并整体弃权，同时保留其他候选有依据的分数；V1/V2 对照流程仍在任一候选缺少 evidence 时返回 `UNSUPPORTED_BY_ROUTER`。不凭模型名编造分数。当前输入上限 10,000 UTF-8 字节、最多 8 个候选；实际发送前通过 llama.cpp 渲染模板并计算 token，超出上下文预算则阻断，不静默截断。
+当前 V2 在任一候选完全缺少 evidence 时返回 `UNSUPPORTED_BY_ROUTER`，所有分数未知。不凭模型名编造分数。当前输入上限 10,000 UTF-8 字节、最多 8 个候选；实际发送前通过 llama.cpp 渲染模板并计算 token，超出上下文预算则阻断，不静默截断。
 
-当前默认使用 V3：先检查任务输入，再逐个候选检查能力证据、评分，推理前规范排序。质量提示词在 [`router-system-v3.txt`](src/cirno_route/resources/router-system-v3.txt)，输入、证据与否定复核提示词在同一目录。缺少必要输入时直接弃权；部分候选资料不足时保留其他有依据的分数。完整文件位置、实测与延迟代价见 [V3 验证记录](docs/prompt-evaluation-v3.md)。V1/V2 提示词保留用于对照。修改后在 Pi 中执行 `/reload` 或重启 Pi；自动分类需要重新输入 `/bakarouter` 开启。独立 CLI 下次启动生效，已运行的 HTTP 分类服务需要重启。
+当前默认使用 **V2 单次分类流程**，提示词在 [`router-system-v2.txt`](src/cirno_route/resources/router-system-v2.txt)，V1 保留用于对照。V3 的四份提示词及多阶段分类代码已从当前版本删除，可通过 Git 标签 `v0.1.0-v3-baseline` 找回。V2 仍存在资料不足时未弃权、候选换序时评分波动的已知问题，详见 [V2 评测记录](docs/prompt-evaluation.md)。修改后在 Pi 中执行 `/reload` 或重启 Pi；自动分类需要重新输入 `/bakarouter` 开启。独立 CLI 下次启动生效，已运行的 HTTP 分类服务需要重启。
+
+## 版本管理
+
+私有仓库：[ZheMuxi/cirno-route](https://github.com/ZheMuxi/cirno-route)。当前项目版本 `0.1.1`，分类提示词版本 V2，两者独立编号。提交、发布及安全回退步骤见 [版本与回退政策](docs/versioning.md)，变更见 [CHANGELOG.md](CHANGELOG.md)。
+
+Pi 的依赖锁文件、启动入口和不含密钥的模型配置模板在 `tooling/pi/`。新克隆或切换依赖版本后，执行 `./scripts/install-pi.sh`，安装到相邻的 `../Pi`。已有 Pi 配置与会话保留；密钥仍放本地 `.runtime/`，不会上传。
 
 ## 失败与规则基线
 
@@ -127,7 +133,7 @@ PY
 
 候选资料在 `config/pi-classifier.json`，当前配置 Sonnet 4.6、Opus 4.6、Gemini 3 Flash。每次与8045模型目录求交集；资料属于配置声明，尚无本地成功率校准。分类本身的任务正文始终发送到本地 Gemma，普通 Pi 对话则会通过8045执行。
 
-Pi 独立安装在 `../Pi`，固定官方包 `@earendil-works/pi-coding-agent@1.2.0`，依赖由该目录 `package-lock.json` 锁定。配置和会话在 `Pi/.state/`；网关密钥保存在本项目 `.runtime/gateway.token`，启动时以环境变量提供。
+Pi 独立安装在 `../Pi`，固定官方包 `@earendil-works/pi-coding-agent@1.2.0`，依赖由源码中的 `tooling/pi/package-lock.json` 锁定，安装脚本将其同步到该目录。配置和会话在 `Pi/.state/`；网关密钥保存在本项目 `.runtime/gateway.token`，启动时以环境变量提供。
 
 原来的 `/Users/zhemuxi/CirnoRoute/Pi/pi-local` 入口保留，用于直接把 Gemma 当执行模型。其早期测试见 [docs/pi-smoke.md](docs/pi-smoke.md)。
 
