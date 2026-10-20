@@ -26,4 +26,5 @@ jobs:
       - run: uv run --frozen ruff check .
       - run: uv run --frozen ruff format --check .
       - run: uv run --frozen pytest -q
+      - run: ./scripts/install-pi.sh
       - run: node --test packages/pi-extension/*.test.mjs
