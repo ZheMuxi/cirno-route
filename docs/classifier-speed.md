@@ -37,21 +37,29 @@
 
 ## 复测
 
-下面的可选测试只读取已有研究快照，使用同一台机器上的 Gemma 比较旧格式与紧凑格式，不会重新联网研究或执行用户任务。所有速度样本都真正进行推理，没有缓存分类答案。
+先按 [README](../README.md) 安装项目，以下命令从仓库根目录运行。可先使用仓库内固定用例比较旧格式与紧凑格式，模型由运行时管理器准备；首次缺少运行时或权重时可能下载：
 
 ```bash
 .venv/bin/python scripts/benchmark-classifier.py \
-  --catalog-report .runtime/pi-research-20261020T163227Z-report.json \
-  --fixtures --output .runtime/compact-benchmark-new.json
+  --fixtures --modes full compact --output .runtime/compact-fixtures-new.json
 ```
 
-输入报告及其引用的 `snapshots/` 文件必须存在；脚本会验证内容哈希。输出路径必须是新路径。测试结果保存在被 Git 忽略的 `.runtime/` 中。17 项合成用例衡量评分规则遵循情况，真实目录只检验速度、候选完整性和分数变化，不能充当各云模型的实测成功率。
+若需加入自己的模型目录，先运行 `.venv/bin/python scripts/pi-research-smoke.py` 生成研究报告和快照。该准备步骤需要自己的研究服务凭据，并可能产生 API 费用。随后将下面变量替换为脚本实际输出的报告路径：
 
-额外使用 `--vary-tasks --repeats 5` 可轮换编程、写作、数学任务；`--modes compact` 只测紧凑路径。真实 Pi 的显示回归使用 `.venv/bin/python scripts/pi-display-smoke.py`，其中两轮普通算术对话会调用当前网关执行模型，能力缓存失效时也可能重新研究。
+```bash
+CATALOG_REPORT=".runtime/your-research-report.json"
+.venv/bin/python scripts/benchmark-classifier.py \
+  --catalog-report "$CATALOG_REPORT" \
+  --fixtures --modes full compact --output .runtime/compact-catalog-new.json
+```
 
-## 2026-10-21 本机结果
+对照脚本只读取已有快照，不重新联网研究或执行用户任务；所有速度样本均真正进行推理，没有缓存分类答案。输入报告及其引用的 `snapshots/` 文件必须存在，历史私有报告不随源码提供；脚本会验证内容哈希。输出路径必须是新路径。测试结果保存在被 Git 忽略的 `.runtime/` 中。17 项合成用例衡量评分规则遵循情况，真实目录只检验速度、候选完整性和分数变化，不能充当各云模型的实测成功率。
 
-Gemma 权重、llama.cpp、8K 上下文、温度 0、种子 42 均保持原值。使用提速前报告引用的冻结资料：39 个候选全部保留，12 个有证据参与 Gemma 推理，27 个仍为未知；有证据候选从 4 批合并成 2 批。
+额外使用 `--vary-tasks --repeats 5` 可轮换编程、写作、数学任务；`--modes compact` 只测紧凑路径。真实 Pi 的显示回归使用 `.venv/bin/python scripts/pi-display-smoke.py`，其中两轮普通算术对话会调用已配置的执行模型，能力缓存失效时也可能重新研究。
+
+## 2026-10-21 历史验证结果
+
+Gemma 权重、llama.cpp、8K 上下文、温度 0、种子 42 均保持原值。使用该次测试保存的冻结资料（数量与耗时不是新安装的保证）：39 个候选全部保留，12 个有证据参与 Gemma 推理，27 个仍为未知；有证据候选从 4 批合并成 2 批。
 
 | 同一编程任务对照 | 旧完整格式 | 最终紧凑格式 |
 | --- | ---: | ---: |
@@ -66,6 +74,6 @@ Gemma 权重、llama.cpp、8K 上下文、温度 0、种子 42 均保持原值�
 
 曾尝试将稳定候选资料放在任务之前以提高跨任务缓存命中，但出现新的翻译用例失败，因此已撤回；最终仍保留任务在前。没有为了缩短耗时而删除这项失败用例或更改预期。
 
-完整同机对照：`.runtime/compact-benchmark-final.json`。被撤回的排列实验单独保留在 `.runtime/compact-benchmark-prefix.json`，其耗时不作为最终版本性能。自动化验证包括 Python 108 项、Node 36 项、Ruff 和 diff 检查。
+完整对照与被撤回的排列实验分别保存为独立报告；原始报告不随源码分发。排列实验的耗时不作为最终版本性能。自动化验证包括 Python 108 项、Node 36 项、Ruff 和 diff 检查。
 
-最终真实 Pi 报告：`.runtime/pi-display-20261020T170838Z.report.json`。三次 `/classify` 均完整返回 39 行、39/39 缓存命中、2 批、无重分批。随后开启自动分类的一轮普通对话确实运行了 2 批分类，未输出评分卡；关闭后的一轮普通对话也没有评分卡。两轮都显示实际 `cirno-gateway/claude-sonnet-4-6`，均正常完成，无分类警告。
+显示复测脚本生成被 Git 忽略的 `.runtime/pi-display-*.report.json`；下面记录的是提速阶段的历史测试。三次 `/classify` 均完整返回 39 行、39/39 缓存命中、2 批、无重分批。随后开启自动分类的一轮普通对话确实运行了 2 批分类，未输出评分卡；关闭后的一轮普通对话也没有评分卡。两轮都显示实际 `cirno-gateway/claude-sonnet-4-6`，均正常完成，无分类警告。

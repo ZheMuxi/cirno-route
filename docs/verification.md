@@ -1,12 +1,12 @@
-# 本机验证记录
+# 历史验证记录
 
 日期：2026-10-14（Asia/Shanghai）。以下是实现验证，不是独立路由效果评估。
 
 ## 环境
 
-- Apple M3 Pro，36 GiB 统一内存。
+- 验证平台：macOS Apple Silicon；本记录不是最低硬件要求。
 - Pi 1.2.0；Python 3.12.11；llama.cpp b10516-b95502ba9。
-- 现有模型：`HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:Q4_K_M`。
+- 验证模型：`HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:Q4_K_M`。
 - 权重 SHA-256：`d0027dd3a9128d9323e9f282c8bf010a8526c46477584535991dc1a869b56e96`。
 - 模板 SHA-256：`55572b8d3c8342044e25874c73fe5234b661fa0a57a57f6ef75b58e03d7d959a`。
 - 8192 token 上下文，1536 token 输出上限，temperature=0，seed=42，关闭 reasoning。
@@ -31,7 +31,7 @@
 
 ## 复现与限制
 
-执行 README 中的启动步骤，再运行 `.venv/bin/pytest -q` 和 `.venv/bin/python scripts/smoke.py`。原始合成测试记录保存在 `.runtime/smoke-report.json`、`.runtime/http-smoke.json`，不进入源码发布。测试结束后已停止本次启动的两个服务，使用启动脚本即可重启。
+按 [README](../README.md) 的独立运行时与 API 步骤准备自己的环境，再运行 `.venv/bin/pytest -q` 和 `.venv/bin/python scripts/smoke.py`。原始合成测试记录保存在 `.runtime/smoke-report.json`、`.runtime/http-smoke.json`，不进入源码发布。复测前须自行启动所需服务；测试后关闭自己启动的服务，不依赖历史测试留下的进程。
 
 示例候选是合成配置，没有实测能力卡。以上只有三个生成样本，不能用于准确率、P50/P95、收益或安全保证的统计结论。合法输出仍可能存在语义判断错误。固定 seed 不代表跨硬件或运行时逐 token 可复现。
 

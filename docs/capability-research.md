@@ -4,10 +4,10 @@
 
 ## 使用
 
-重启 Pi，或在 Pi 中执行 `/reload`：
+先按 [README](../README.md) 安装依赖并配置执行服务、研究服务及凭据。以下 shell 命令从仓库根目录运行。启动 Pi，或在已打开的 Pi 中执行 `/reload`：
 
 ```bash
-/Users/zhemuxi/CirnoRoute/Pi/pi-classifier
+./scripts/start-pi.sh
 ```
 
 | 命令 | 行为 |
@@ -18,7 +18,7 @@
 | `/bakamodels` | 查看当前可用候选的有效缓存数量、未知数量和目录，不调用研究模型或搜索接口 |
 | `/bakamodels refresh` | 用户主动重新查询全部当前候选，忽略有效缓存；保留旧资料快照 |
 
-首次查询覆盖 Pi `modelRegistry.getAvailable()` 提供的候选；同一 provider/model 去重并使用稳定 ID。`cirno-gateway` 的候选另与 8045 的 `/models` 求交集。其他 provider 的“可用”表示 Pi 有相应认证配置，不代表本功能逐个付费调用执行模型、检查余额或验证网关真实后端。
+首次查询覆盖 Pi `modelRegistry.getAvailable()` 提供的候选；同一 provider/model 去重并使用稳定 ID。`cirno-gateway` 的候选另与 `config/pi-classifier.json` 中 `gateway_url` 对应的 `/models` 求交集。其他 provider 的“可用”表示 Pi 有相应认证配置，不代表本功能逐个付费调用执行模型、检查余额或验证网关真实后端。
 
 默认最多接受 128 个目录条目，worker 请求体上限为 60,000 UTF-8 字节，不静默截掉超出的模型。项目配置每次本地请求最多 8 个候选、30,000 UTF-8 字节。Pi 默认每批最多 8 个，先按 28,000 字节预算拆分；紧凑传输后由 llama.cpp 检查实际 token 数，超出 8K 上下文预算的批次继续二分。任务和单张卡片不截断。每批只发送当前任务和这一批资料，没有聊天历史，Gemma 进程保持加载。排序和分组固定，减少目录顺序变化的影响，但不保证跨批评分一致性或消除 V2 的语义问题。压缩方式、回退开关与实测见 [分类提速](classifier-speed.md)。
 
@@ -66,7 +66,7 @@
 
 候选执行价格单独保存在 `config/model-prices.json`，在 Gemma 评分后参与推荐；`/bakaprice` 可选择三档价格偏好，规则见 [模型价格](model-pricing.md)。能力刷新不会更新价格，也不会因为改价格或价格偏好而重查能力缓存。
 
-`config/pi-classifier.json` 的 `research_names` 可为 `provider/model` 指定明确的查询名称。本机 Gemma 已指定完整 HauhauCS Aggressive checkpoint，避免查询时误当成 Google 官方原版；这只是查询标识，仍需来源支持才能使用。未知网关后缀必须有包含该别名的资料，不能继承基础模型的分数。
+`config/pi-classifier.json` 的 `research_names` 可为 `provider/model` 指定明确的查询名称。模板为本地 Gemma 指定完整 HauhauCS Aggressive checkpoint，避免查询时误当成 Google 官方原版；这只是查询标识，仍需来源支持才能使用。未知网关后缀必须有包含该别名的资料，不能继承基础模型的分数。
 
 ## 失败、缓存与追溯
 
@@ -82,7 +82,7 @@
 
 没有有效旧资料时，失败码会单独保存在 `failures/`，默认 300 秒内不重复请求（可配置 `failure_retry_seconds`）。这不是成功资料缓存，对应候选仍为未知；`/bakamodels refresh` 始终绕过该等待时间。研究模型声明型号未确认时，程序丢弃其余推测字段，缓存为统一的未知卡片。
 
-从代码退回原配置流程：将 `config/pi-classifier.json` 的 `candidate_source` 改成 `configured`；此时只使用其中已有三个候选。独立 CLI 和 `/v1/classify` 继续使用调用方传入的候选，不会隐式联网。
+从代码退回原配置流程：将 `config/pi-classifier.json` 的 `candidate_source` 改成 `configured`；此时只使用该文件中的候选卡，默认模板有三张示例卡。独立 CLI 和 `/v1/classify` 继续使用调用方传入的候选，不会隐式联网。
 
 ## 验证
 
@@ -106,6 +106,6 @@ node --test packages/pi-extension/*.test.mjs
 - 随后同一合成编程任务连续分类两次，均为 Gemma V2、4 批、39 行结果、39/39 资料缓存命中；12 个候选有分数，其他保持 null。两次评分一致。
 - 第一次分类约 66.8 秒，第二次约 48.4 秒，不含此前手动查询耗时。多候选本地推理仍有明显延迟，此验证不代表分类准确率评测。
 - 用户任务执行模型调用为 0。最后 `/bakamodels` 成功显示有效缓存；旧能力快照保留为 0600 文件。
-- 本地详细报告：`.runtime/pi-research-20261020T163227Z-report.json`。文件名使用 UTC；以上日期按 Asia/Shanghai。
+- 复测脚本生成 `.runtime/pi-research-*-report.json`，文件名使用 UTC；以上日期按 Asia/Shanghai。原始报告和资料快照均被 Git 忽略，不随源码分发。
 
 接口依据：[DeepSeek Search](https://api-docs.deepseek.com/api/search/)、[Chat Completions](https://api-docs.deepseek.com/api/create-chat-completion/)、[模型 API ID](https://api-docs.deepseek.com/)。

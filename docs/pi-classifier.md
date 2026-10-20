@@ -12,15 +12,15 @@ v0.2.0 新增联网能力研究与完整 Pi 目录分批分类。使用 `/bakamo
 
 ## 启动
 
-本地模型由 Pi 扩展按需启动和管理，不再需要手动启动18080/18081。缺少模型权重或 llama.cpp 时自动下载并校验；详见 [自动准备与生命周期](pi-managed-runtime.md)。8045网关使用用户现有服务。
+先按 [README](../README.md) 安装依赖、配置自己的执行服务和凭据。本文 shell 命令均从仓库根目录运行。本地分类后台由 Pi 扩展按需管理；支持的平台上缺少权重或 llama.cpp 时自动下载并校验，详见 [自动准备与生命周期](pi-managed-runtime.md)。执行网关需要自行提供，项目不附带网关服务。
 
-在希望 Pi 操作的目录下启动：
+启动 Pi：
 
 ```bash
-/Users/zhemuxi/CirnoRoute/Pi/pi-classifier
+./scripts/start-pi.sh
 ```
 
-等价入口：`/Users/zhemuxi/CirnoRoute/cirno-route/scripts/start-pi.sh`。启动默认模型是 `cirno-gateway/claude-sonnet-4-6`，用户可用 Pi 的 `/model` 手动选择。`/classify` 不触发切换，自动路由开启后的普通输入会切换到推荐模型。
+相邻目录安装时，也可使用 `../Pi/pi-classifier`。模板默认模型是 `cirno-gateway/claude-sonnet-4-6`；若自己的服务没有该型号，启动时添加 `--model your-provider/your-model`，或使用 Pi 的 `/model` 手动选择已配置的模型。`/classify` 不触发切换，自动路由开启后的普通输入会切换到推荐模型。
 
 | 操作 | 行为 |
 | --- | --- |
@@ -42,35 +42,35 @@ v0.2.0 新增联网能力研究与完整 Pi 目录分批分类。使用 `/bakamo
 非交互 `--mode json` 的标准输出保留 Pi 原有事件；手动分类诊断在 **stderr** 以独立 JSON 行输出，`type=cirno-classification`，实际回答模型为 `type=cirno-execution-model`。普通输入不会输出评分 JSON。RPC 模式通过 Pi 的 `extension_ui_request/notify` 显示结果。
 
 ```bash
-/Users/zhemuxi/CirnoRoute/Pi/pi-classifier --no-session --no-tools --mode json -p \
-  '/classify 用中文解释二分查找' 2> /tmp/cirno-classification.jsonl
+./scripts/start-pi.sh --no-session --no-tools --mode json -p \
+  '/classify 用中文解释二分查找'
 ```
 
 ## 模型、接口与凭据
 
 - 分类运行时：本地 `cirno-gemma-e4b`。可复用已验证的18080服务，或由插件启动随机回环端口的私有 llama.cpp。
 - Pi 通过管道调用 Python 分类后台，不依赖分类 HTTP API；18081仍可作为独立开发接口使用。
-- Pi 执行接口及模型目录：`http://127.0.0.1:8045/v1`，用户密钥在 `.runtime/gateway.token`，0600；`.runtime` 为 0700。
-- Pi 的 `.state/models.json` 使用 `${CIRNO_GATEWAY_API_KEY}` 环境变量占位，启动器读取密钥；不在源码或报告中记录密钥值。
-- 候选来源：`config/pi-classifier.json` 当前为 `pi`，读取 Pi 完整可用目录，网关候选与 8045 的 `/models` 求交集；模型资料来自独立能力缓存。
-- 切回 `configured` 模式时才使用文件内原有 Sonnet 4.6、Opus 4.6、Gemini 3 Flash 三张配置卡。
-- 32,768 上下文和 2,048 输出是当前 Pi 客户端的保守配置上限，不表示网关模型真实能力上限。网关未提供价格，Pi 可能显示零成本，不应解释为免费。
+- 网关接口由 `config/pi-classifier.json` 的 `gateway_url` 配置，并与 Pi provider 的 `baseUrl` 保持一致；`http://127.0.0.1:8045/v1` 仅为模板示例。目录查询只允许字面回环 HTTP 地址。密钥保存在 `.runtime/gateway.token`，权限 0600；`.runtime` 为 0700。
+- Pi 的 `.state/models.json` 使用 `"apiKey": "CIRNO_GATEWAY_API_KEY"` 引用环境变量，启动器读取密钥；不在源码或报告中记录密钥值。
+- 候选来源：`config/pi-classifier.json` 当前为 `pi`，读取 Pi 完整可用目录，网关候选与所配置网关的 `/models` 求交集；模型资料来自独立能力缓存。
+- 切回 `configured` 模式时使用配置文件中的候选卡；模板含 Sonnet 4.6、Opus 4.6、Gemini 3 Flash 三张示例卡，应按自己的可用模型和能力依据调整。
+- 32,768 上下文和 2,048 输出是当前 Pi 客户端的保守配置上限，不表示网关模型真实能力上限。若网关未提供价格，Pi 可能显示零成本，不应解释为免费。
 
-8045 是本地接口地址，其背后执行请求可能转发到外部模型。`/classify` 只向8045读取模型目录，任务正文只进入本机分类后台和 llama.cpp；普通 Pi 对话会把正常任务上下文交给8045执行。
+回环网关仍可能向外部模型转发请求。`/classify` 的任务正文只进入本地分类后台和 llama.cpp；目录查询访问已配置网关，能力研究只发送模型标识。普通 Pi 对话按所选 provider 发送执行上下文。
 
-候选的 `gateway-alias-2026-10-14` 是配置快照标签，不是供应商 checkpoint。网关未给出可验证的后端 revision；记录的实际模型是 Pi 使用的 provider/model ID，不能证明网关内部没有重映射。
+示例候选的 `gateway-alias-2026-10-14` 是历史配置快照标签，不是供应商 checkpoint。网关未给出可验证的后端 revision；记录的实际模型是 Pi 使用的 provider/model ID，不能证明网关内部没有重映射。
 
 ## 能力资料依据
 
-卡片均标记为 `configured`，没有 `measured` 数据。本阶段 `relevant_preferences` 始终为空，`preference_fit_level` 必须为 null。0–4 分是 Gemma 根据资料给出的质量适配等级，价格不改变分数，也不当作成功概率。Pi 在评分后独立应用价格偏好生成推荐。
+初始示例卡片均标记为 `configured`，没有 `measured` 数据。本阶段 `relevant_preferences` 始终为空，`preference_fit_level` 必须为 null。0–4 分是 Gemma 根据资料给出的质量适配等级，价格不改变分数，也不当作成功概率。Pi 在评分后独立应用价格偏好生成推荐。
 
 资料来自供应商公开描述：[Anthropic Sonnet 4.6](https://www.anthropic.com/news/claude-sonnet-4-6)、[Anthropic Opus 4.6](https://www.anthropic.com/news/claude-opus-4-6)、[Google Gemini 3 Flash](https://blog.google/innovation-and-ai/technology/developers-tools/build-with-gemini-3-flash/)。这是配置依据，尚未验证该网关模型在本项目任务上的实际成功率。
 
 ## 已完成实测
 
-下表是初次接入时使用 V1 提示词的历史记录。当前使用 V2 单次分类流程，见 [V2 评测记录](prompt-evaluation.md)。Pi 中执行 `/reload` 或重启可加载新版；如需普通输入自动分类，再输入 `/bakarouter`。
+下表是初次接入时使用 V1 提示词的历史记录。当前使用 V2 评分规则，每批独立分类，见 [V2 评测记录](prompt-evaluation.md)。Pi 中执行 `/reload` 或重启可加载新版；如需普通输入自动分类，再输入 `/bakarouter`。
 
-以下请求由真正的 Pi 加载扩展，并调用已锁定的本地 Gemma 生成。普通输入用例在自动分类开启时运行；当前复测脚本会先输入 `/bakarouter`。不是模拟返回或固定分类表。
+以下请求由真正的 Pi 加载扩展，并调用已锁定的本地 Gemma 生成。普通输入用例在自动分类开启时运行；历史三候选复测脚本会先输入 `/bakarouter`。不是模拟返回或固定分类表。
 
 | Pi 输入 | Sonnet / Opus / Flash 评分 | Gemma 分类耗时 | 结果 |
 | --- | --- | --- | --- |
@@ -83,23 +83,24 @@ v0.2.0 新增联网能力研究与完整 Pi 目录分批分类。使用 `/bakamo
 
 另外用 Pi SDK 重建工具测试会话上下文：1 条分类审计、5 条模型上下文消息；分类审计存在会话中，评分和分类条目均不在执行上下文中。普通对话与工具续传的真实 `message_end` 均记录 `cirno-gateway/claude-sonnet-4-6`。
 
-这些是功能与连通性测试，不是分类准确率评估。v1 曾在简单算术上无依据地给 Opus 更高评分，新版已针对此类偏分调整；仍未实现成本优化或经过校准的任务难度决策，不能据此声称自动选模有效。
+这些是功能与连通性测试，不是分类准确率评估。v1 曾在简单算术上无依据地给 Opus 更高评分，新版已针对此类偏分调整；当时尚未实现成本优化；当前价格路由已单独实现，但没有经过校准的任务难度决策，不能由这组历史测试推断其选模收益。
 
-测试原始记录（被 Git 忽略）在 `.runtime/pi-integration-*.jsonl` / `.stderr`、`.runtime/pi-integration-report.json`、`.runtime/pi-tool-report.json`。测试任务均为合成数据。
+测试脚本产生的原始记录使用以下路径（均被 Git 忽略，不随源码分发）：`.runtime/pi-integration-*.jsonl` / `.stderr`、`.runtime/pi-integration-report.json`、`.runtime/pi-tool-report.json`。测试任务均为合成数据。
 
 ## 重复验证与开发
 
 ```bash
-cd /Users/zhemuxi/CirnoRoute/cirno-route
 .venv/bin/pytest -q
 node --test packages/pi-extension/*.test.mjs
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
-# 真正调用 Gemma；普通对话和工具用例也会调用8045：
-.venv/bin/python scripts/pi-integration-smoke.py
+# 真正调用 Gemma；普通对话和工具用例也会调用所配置的回答服务：
+.venv/bin/python scripts/pi-routing-smoke.py
 .venv/bin/python scripts/pi-tool-smoke.py
 ```
 
+当前目录模式使用上面的路由脚本；历史 `pi-integration-smoke.py` 的三候选断言仅适用于旧配置。
+
 原接入阶段的 Python 57 项与扩展 Node 20 项测试已通过；后台管理新增验证见 [自动准备与生命周期](pi-managed-runtime.md)。扩展覆盖回环限制、重定向拒绝、超时/取消、响应体上限、HTTP错误脱敏、候选交集、ID/分数/证据校验、禁止捏造偏好/测量、缺候选、附图/超长输入和分类开关。
 
-扩展以 TypeScript 适配 Pi、原生 ESM 实现可独立测试的客户端，使用已安装的 Pi 1.2.0 SDK。`packages/pi-extension/node_modules` 是到 `../../../Pi/node_modules` 的本地链接，被 Git 忽略；没有新增全局 npm 包。若重建机器，先恢复 Pi 的锁定安装，再创建此链接用于 Node 单元测试。Pi 自己加载扩展时按其扩展加载器解析依赖。
+扩展以 TypeScript 适配 Pi、原生 ESM 实现可独立测试的客户端，使用已安装的 Pi 1.2.0 SDK。`packages/pi-extension/node_modules` 是到 `../../../Pi/node_modules` 的本地链接，被 Git 忽略；没有新增全局 npm 包。重建环境时运行 `./scripts/install-pi.sh`，会恢复锁定安装并自动创建此链接。Pi 自己加载扩展时按其扩展加载器解析依赖。

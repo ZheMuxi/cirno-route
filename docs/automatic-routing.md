@@ -43,6 +43,8 @@ JSON 模式在 stderr 输出 `cirno-routing`（成功切换或沿用相同模型
 
 ## 验证
 
+先按 [README](../README.md) 安装项目并配置自己的执行服务和研究凭据。以下 shell 命令从仓库根目录运行，真实调用可能产生 API 费用。
+
 ```bash
 node --test packages/pi-extension/*.test.mjs
 .venv/bin/pytest -q
@@ -55,7 +57,7 @@ node --test packages/pi-extension/*.test.mjs
 
 路由 smoke 用简短算术请求验证两个价格档位的真实响应模型不同、普通对话无评分、关闭后保留模型、`/classify` 不执行也不改模型，并检查新会话默认模型未改变。脚本结束恢复原价格偏好，报告保存在 `.runtime/pi-routing-*.report.json`。工具 smoke 检查一次选择贯穿工具请求和后续回答。
 
-北京时间 2026-10-21 实测通过，路由报告为 `.runtime/pi-routing-20261020T173742Z.report.json`：
+北京时间 2026-10-21 的历史实测如下，使用当时已配置的候选与资料快照；这些型号是测试对象，不是安装前提。原始报告被 Git 忽略，不随源码分发：
 
 | 场景 | 实际响应模型 | 验证 |
 | --- | --- | --- |
