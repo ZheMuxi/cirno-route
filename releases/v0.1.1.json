@@ -41,7 +41,6 @@
     "packages/pi-extension/local-backend.test.mjs": "f92a26f2bbceefa208d761160c83f082ad4a62de275249089a793ce91c00d16f",
     "packages/pi-extension/package.json": "4e3dac1e27e339927d591f6db8eccc4a3054d9cc23f697f38bd167385193fe2d",
     "pyproject.toml": "73bded97108b4bae65091ee7e879432d4b06e4ff5d8b16ab12fb9ee0f3818ace",
-    "src/cirno_route/.DS_Store": "d9ed1bb40cc18d904fe3b9e2950d9f0bf9d5b8dc07b494a35e37a4666b370b11",
     "src/cirno_route/__init__.py": "aedd21e7cab6d8dd2e650b5e1340abb61c8965d195ef2f31db9995d52a0b5337",
     "src/cirno_route/api.py": "db5b745ad6ed9fb4a7f147390a6ca3e444e0e5eaae733d9e61ff740b15a1c1ac",
     "src/cirno_route/classifier.py": "f679e35f029a3989716ac3b4455cc2d1d4ab15512289d3dd04800badd5d68a41",
