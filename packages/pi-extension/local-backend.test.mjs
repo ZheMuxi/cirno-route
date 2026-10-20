@@ -14,7 +14,7 @@ function fixture(t, { stall = false } = {}) {
     lines.on('line', line => {
       const r=JSON.parse(line);
       process.stdout.write(JSON.stringify({type:'progress', id:r.id, stage:'starting-model'})+'\\n');
-      if (!${stall}) process.stdout.write(JSON.stringify({type:'result', id:r.id, result:{pid:process.pid}})+'\\n');
+      if (!${stall}) process.stdout.write(JSON.stringify({type:'result', id:r.id, result:{pid:process.pid, method:r.method, body:r.body}})+'\\n');
     });
     lines.on('close', () => process.exit(0));
   `);
@@ -54,4 +54,21 @@ test('overlapping requests are refused without a second process', async t => {
   await assert.rejects(backend.classify({}), /CLASSIFIER_BUSY/);
   await backend.close();
   await rejected;
+});
+
+test('research forwards the action over the same worker without confusing it with classification', async t => {
+  const backend = fixture(t);
+  const request = { models: [{ candidate_id: 'one' }], action: 'refresh' };
+  const research = await backend.research(request);
+  assert.equal(research.method, 'research');
+  assert.deepEqual(research.body, request);
+  const classification = await backend.classify({ task: { text: 'local-only' } });
+  assert.equal(classification.method, 'classify');
+  assert.equal(classification.pid, research.pid);
+});
+
+test('oversized catalog is rejected before spawning the worker or truncating stdin', async t => {
+  const backend = fixture(t);
+  await assert.rejects(backend.research({ name: '中'.repeat(21000) }), /REQUEST_TOO_LARGE/);
+  assert.equal(backend.child, null);
 });

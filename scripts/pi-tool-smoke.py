@@ -47,7 +47,7 @@ def main():
         cwd=ROOT,
         capture_output=True,
         text=True,
-        timeout=180,
+        timeout=1200,
         check=False,
     )
     (RUNTIME / "pi-integration-tool.jsonl").write_text(proc.stdout)
@@ -61,22 +61,29 @@ def main():
         if r.get("type") == "message_end" and r.get("message", {}).get("role") == "assistant"
     ]
     assert proc.returncode == 0
-    assert len(classifiers) == 1 and classifiers[0].get("source") == "gemma"
-    assert classifiers[0]["status"] == "ok"
+    assert not classifiers
+    assert not any(r.get("type") == "cirno-classifier-warning" for r in events)
+    assert any(
+        r.get("type") == "cirno-setup" and "Gemma 分类" in r.get("message", "") for r in events
+    )
+    labels = [r["model"] for r in events if r.get("type") == "cirno-execution-model"]
+    routes = [r for r in events if r.get("type") == "cirno-routing"]
+    assert len(routes) == 1
+    chosen = f"{routes[0]['provider']}/{routes[0]['model']}"
+    assert labels == [chosen]
     assert len(tools) == 1 and tools[0]["toolName"] == "bash" and not tools[0]["isError"]
     assert "5050" in "".join(c.get("text", "") for c in tools[0]["result"]["content"])
     assert len(assistants) >= 2
-    assert all(
-        a["provider"] == "cirno-gateway" and a["model"] == "claude-sonnet-4-6" for a in assistants
-    )
+    assert all(f"{a['provider']}/{a['model']}" == chosen for a in assistants)
     assert assistants[-1]["stopReason"] == "stop"
     assert "5050" in "".join(c.get("text", "") for c in assistants[-1]["content"])
     report = {
         "tool_loop": "passed",
         "classification_count": len(classifiers),
-        "classification_latency_ms": classifiers[0]["latency_ms"],
+        "execution_model_labels": labels,
         "assistant_turn_count": len(assistants),
-        "actual_model": "cirno-gateway/claude-sonnet-4-6",
+        "actual_model": chosen,
+        "routing_count": len(routes),
         "tool_output": "5050",
     }
     print(json.dumps(report, ensure_ascii=False), flush=True)

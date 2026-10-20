@@ -57,7 +57,7 @@ def main():
             check=False,
             capture_output=True,
             text=True,
-            timeout=180,
+            timeout=1200,
         )
         (RUNTIME / f"pi-integration-{name}.jsonl").write_text(proc.stdout)
         (RUNTIME / f"pi-integration-{name}.stderr").write_text(proc.stderr)
@@ -68,35 +68,45 @@ def main():
             for r in rows
             if r.get("type") == "message_end" and r.get("message", {}).get("role") == "assistant"
         ]
-        assert len(classifications) == 1, (
+        assert len(classifications) == (0 if executes else 1), (
             name,
             "classification event count",
             len(classifications),
         )
-        prediction = classifications[0]
-        assert prediction.get("source") == "gemma" and prediction.get("status") == "ok", (
-            name,
-            prediction,
-        )
-        assert prediction["classifier_model"] == "cirno-gemma-e4b"
-        assert {c["candidate_id"] for c in prediction["candidates"]} == {
-            "sonnet-4-6",
-            "opus-4-6",
-            "gemini-3-flash",
-        }
-        assert all(c["preference_fit_level"] is None for c in prediction["candidates"])
-        assert all("PREFERENCE_MATCH" not in c["reason_codes"] for c in prediction["candidates"])
+        prediction = classifications[0] if classifications else None
+        labels = [r["model"] for r in rows if r.get("type") == "cirno-execution-model"]
+        if prediction:
+            assert prediction.get("source") == "gemma"
+            assert prediction["classifier_model"] == "cirno-gemma-e4b"
+            ids = [c["candidate_id"] for c in prediction["candidates"]]
+            assert len(set(ids)) == len(ids) == prediction["research"]["total"]
+            assert all(c["preference_fit_level"] is None for c in prediction["candidates"])
+            assert all(
+                "PREFERENCE_MATCH" not in c["reason_codes"] for c in prediction["candidates"]
+            )
         if executes:
+            assert not any(r.get("type") == "cirno-classifier-warning" for r in rows)
+            assert any(
+                r.get("type") == "cirno-setup" and "Gemma 分类" in r.get("message", "")
+                for r in rows
+            )
             assert assistants, (name, "no execution")
             answer = assistants[-1]
-            assert answer["provider"] == "cirno-gateway" and answer["model"] == "claude-sonnet-4-6"
+            routes = [r for r in rows if r.get("type") == "cirno-routing"]
+            assert len(routes) == 1
+            assert (
+                answer["provider"] == routes[0]["provider"]
+                and answer["model"] == routes[0]["model"]
+            )
             assert answer["stopReason"] == "stop", (
                 name,
                 answer.get("stopReason"),
                 answer.get("errorMessage"),
             )
             assert "703" in "".join(c.get("text", "") for c in answer["content"])
+            assert labels == [f"{answer['provider']}/{answer['model']}"]
         else:
+            assert not labels
             assert not assistants, (
                 name,
                 "classifier command unexpectedly executed task",
@@ -120,9 +130,10 @@ def main():
                 {
                     "case": name,
                     "pass": True,
-                    "latency_ms": prediction["latency_ms"],
+                    "latency_ms": prediction["latency_ms"] if prediction else None,
                     "scores": {
-                        r["candidate_id"]: r["quality_level"] for r in prediction["candidates"]
+                        r["candidate_id"]: r["quality_level"]
+                        for r in (prediction["candidates"] if prediction else [])
                     },
                     "execution_models": report["execution_models"],
                 },

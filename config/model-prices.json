@@ -1,0 +1,86 @@
+{
+  "schema_version": "1",
+  "currency": "USD",
+  "models": {
+    "deepseek/deepseek-flash": {
+      "input_per_million": 0.3,
+      "output_per_million": 1.2,
+      "cache_read_per_million": 0.006,
+      "source": "official",
+      "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "checked_at": "2026-10-20",
+      "valid_until": "2026-11-20",
+      "note": "官方高峰期、缓存未命中的文本标准价；非高峰折扣与缓存优惠未用于比较。"
+    },
+    "deepseek/deepseek-v4-pro": {
+      "input_per_million": 1.32,
+      "output_per_million": 3.96,
+      "cache_read_per_million": 0.044,
+      "source": "official",
+      "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+      "checked_at": "2026-10-20",
+      "valid_until": "2026-11-20",
+      "note": "官方高峰期、缓存未命中的文本标准价；非高峰折扣与缓存优惠未用于比较。"
+    },
+    "cirno-gateway/claude-sonnet-4-6": {
+      "input_per_million": 3,
+      "output_per_million": 15,
+      "cache_read_per_million": 0.3,
+      "source": "reference",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "checked_at": "2026-10-20",
+      "valid_until": "2026-11-20",
+      "note": "官方全球端点标准价，仅作网关别名参考；网关实际费率及后端映射未核实。"
+    },
+    "cirno-gateway/claude-opus-4-6": {
+      "input_per_million": 5,
+      "output_per_million": 25,
+      "cache_read_per_million": 0.5,
+      "source": "reference",
+      "source_url": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "checked_at": "2026-10-20",
+      "valid_until": "2026-11-20",
+      "note": "官方全球端点标准价，仅作网关别名参考；网关实际费率及后端映射未核实。"
+    },
+    "cirno-gateway/gemini-3.8-flash": {
+      "input_per_million": 0.75,
+      "output_per_million": 3.75,
+      "cache_read_per_million": 0.075,
+      "source": "reference",
+      "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
+      "checked_at": "2026-10-20",
+      "valid_until": "2026-11-20",
+      "note": "官方 2026 年文本标准价，仅作网关别名参考；网关实际费率未核实，2027 年价格调整需重新核对。"
+    },
+    "cirno-gateway/gemini-3.6-flash": {
+      "input_per_million": 0.75,
+      "output_per_million": 3.75,
+      "cache_read_per_million": 0.075,
+      "source": "reference",
+      "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
+      "checked_at": "2026-10-20",
+      "valid_until": "2026-11-20",
+      "note": "官方 2026 年文本标准价，仅作网关别名参考；网关实际费率未核实，2027 年价格调整需重新核对。"
+    },
+    "cirno-gateway/gemini-3.5-flash-lite": {
+      "input_per_million": 0.3,
+      "output_per_million": 2.5,
+      "cache_read_per_million": 0.03,
+      "source": "reference",
+      "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
+      "checked_at": "2026-10-20",
+      "valid_until": "2026-11-20",
+      "note": "官方文本标准价，仅作网关别名参考；网关实际费率及后端映射未核实。"
+    },
+    "cirno-gateway/gemini-3.1-flash-lite": {
+      "input_per_million": 0.25,
+      "output_per_million": 1.5,
+      "cache_read_per_million": 0.025,
+      "source": "reference",
+      "source_url": "https://ai.google.dev/gemini-api/docs/pricing",
+      "checked_at": "2026-10-20",
+      "valid_until": "2026-11-20",
+      "note": "官方文本标准价，仅作网关别名参考；网关实际费率及后端映射未核实。"
+    }
+  }
+}
