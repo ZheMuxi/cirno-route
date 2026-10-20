@@ -10,6 +10,7 @@ const stages = {
   'downloading-model': '下载 Gemma 权重',
   'starting-model': '加载本地 Gemma…',
   'checking-model': '校验模型与模板…',
+  'researching-models': '查询并整理模型能力资料',
   ready: 'Gemma 分类中…',
 };
 
@@ -48,7 +49,7 @@ export class LocalBackend {
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', chunk => {
       buffer += chunk;
-      if (buffer.length > 262144) {
+      if (buffer.length > 2097152) {
         this.pending?.reject(new ClassifierError('LOCAL_BACKEND_PROTOCOL_ERROR'));
         void this.close(); return;
       }
@@ -63,7 +64,10 @@ export class LocalBackend {
         if (!this.pending || record.id !== this.pending.id) continue;
         if (record.type === 'progress' && stages[record.stage]) {
           const percent = Number.isInteger(record.percent) && record.percent >= 0 && record.percent <= 100 ? ` ${record.percent}%` : '';
-          this.pending.onProgress?.(stages[record.stage] + percent);
+          const count = Number.isInteger(record.completed) && Number.isInteger(record.total)
+            && record.completed >= 0 && record.completed <= record.total && record.total <= 128
+            ? ` ${record.completed}/${record.total}` : '';
+          this.pending.onProgress?.(stages[record.stage] + percent + count);
         } else if (record.type === 'result') this.pending.resolve(record.result);
         else if (record.type === 'error') this.pending.reject(new ClassifierError(
           typeof record.code === 'string' && /^[A-Z_]{1,80}$/.test(record.code) ? record.code : 'LOCAL_BACKEND_ERROR'
@@ -73,9 +77,18 @@ export class LocalBackend {
   }
 
   async classify(body, { signal, onProgress } = {}) {
+    return this.request('classify', body, { signal, onProgress });
+  }
+
+  async research(body, { signal, onProgress } = {}) {
+    return this.request('research', body, { signal, onProgress });
+  }
+
+  async request(method, body, { signal, onProgress } = {}) {
     if (this.closing) await this.closing;
     if (signal?.aborted) throw new ClassifierError('CLASSIFIER_CANCELLED');
     if (this.pending) throw new ClassifierError('CLASSIFIER_BUSY');
+    if (Buffer.byteLength(JSON.stringify(body)) > 60000) throw new ClassifierError('REQUEST_TOO_LARGE');
     if (!this.child) this.start();
     return new Promise((resolve, reject) => {
       const id = randomUUID();
@@ -96,7 +109,7 @@ export class LocalBackend {
         finish(reject, new ClassifierError('LOCAL_BACKEND_TIMEOUT'));
         void this.close();
       }, this.timeoutMs);
-      this.child.stdin.write(JSON.stringify({ id, body }) + '\n');
+      this.child.stdin.write(JSON.stringify({ id, method, body }) + '\n');
     });
   }
 

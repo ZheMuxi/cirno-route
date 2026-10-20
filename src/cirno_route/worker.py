@@ -18,6 +18,7 @@ from .config import Settings, load_settings
 from .contracts import ClassifyRequest, RuntimeLock
 from .errors import ClassifierError
 from .provision import MANIFEST, ensure_binary, ensure_model, provision_lock
+from .research import CapabilityResearch, ResearchRequest
 from .runtime import LlamaRuntime, read_token
 from .validation import strict_json
 
@@ -185,6 +186,7 @@ def emit(value):
 
 async def serve(settings, directory, *, reuse_existing=True):
     backend = ManagedClassifier(settings, directory, reuse_existing=reuse_existing)
+    research = CapabilityResearch(settings.capability_research)
     loop = asyncio.get_running_loop()
     stop = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -200,14 +202,23 @@ async def serve(settings, directory, *, reuse_existing=True):
     async def handle(packet):
         request_id = packet["id"]
         try:
+            progress = lambda stage, **details: emit(  # noqa: E731
+                {"type": "progress", "id": request_id, "stage": stage, **details}
+            )
+            if packet.get("method") == "research":
+                result = await research.run(
+                    ResearchRequest.model_validate(packet["body"]), progress
+                )
+                emit({"type": "result", "id": request_id, "result": result})
+                return
+            if packet.get("method", "classify") != "classify":
+                raise ClassifierError("UNKNOWN_METHOD")
             request = ClassifyRequest.model_validate(packet["body"])
             if len(request.model_dump_json().encode()) > settings.max_input_bytes:
                 raise ClassifierError("CONTEXT_TOO_LARGE")
             result = await backend.classify(
                 request,
-                lambda stage, **details: emit(
-                    {"type": "progress", "id": request_id, "stage": stage, **details}
-                ),
+                progress,
             )
             emit({"type": "result", "id": request_id, "result": result})
         except Exception as exc:

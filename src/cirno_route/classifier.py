@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
+from .compact import INSTRUCTION, decode, encode
 from .config import Settings
 from .contracts import (
     CandidatePrediction,
@@ -79,6 +80,13 @@ class Classifier:
         model_request = request
         output_schema = constrained_schema(model_request)
         model_schema = OUTPUT_SCHEMA
+        payload = model_request.model_dump_json()
+        system = self.system_prompt + "\nJSON Schema:\n" + json.dumps(model_schema)
+        mapping = None
+        if self.settings.compact_protocol:
+            payload, output_schema, mapping = encode(model_request)
+            model_schema = output_schema
+            system = self.system_prompt + "\n\n" + INSTRUCTION
         metadata = {
             "request_id": str(uuid4()),
             "router_prompt_version": self.prompt_version,
@@ -86,7 +94,11 @@ class Classifier:
             "output_schema_sha256": sha256(json.dumps(OUTPUT_SCHEMA, sort_keys=True)),
             "pipeline_version": self.pipeline_version,
             "generation_schema_sha256": sha256(json.dumps(model_schema, sort_keys=True)),
-            "model_input_sha256": sha256(model_request.model_dump_json()),
+            "model_input_sha256": sha256(payload),
+            "wire_format": "compact-v1" if mapping is not None else "full-v1",
+            "wire_prompt_sha256": sha256(INSTRUCTION) if mapping is not None else None,
+            "model_input_bytes": len(payload.encode()),
+            "original_input_bytes": len(model_request.model_dump_json().encode()),
             "output_constraint_sha256": sha256(json.dumps(output_schema, sort_keys=True)),
             "candidate_cards_sha256": sha256(
                 json.dumps(
@@ -140,8 +152,7 @@ class Classifier:
 
         if not request.eligible_candidates:
             return abstain("NO_ELIGIBLE_MODEL", blocked=True)
-        payload = model_request.model_dump_json()
-        if len(payload.encode()) > self.settings.max_input_bytes:
+        if len(model_request.model_dump_json().encode()) > self.settings.max_input_bytes:
             return abstain("CONTEXT_TOO_LARGE", blocked=True)
         if rules_only:
             return abstain("RULES_ONLY")
@@ -159,8 +170,7 @@ class Classifier:
             async with asyncio.timeout(self.settings.timeout_seconds):
                 await self.runtime.verify(lock)
                 metadata["verified_runtime"] = lock.model_dump()
-                # Schema is in both the grammar and system instruction; all dynamic data stays user.
-                system = self.system_prompt + "\nJSON Schema:\n" + json.dumps(model_schema)
+                # The compact schema is grammar-only; all dynamic data stays user.
                 messages = [
                     {"role": "system", "content": system},
                     {"role": "user", "content": payload},
@@ -176,7 +186,11 @@ class Classifier:
                     try:
                         raw, usage = await self.runtime.complete(messages, output_schema)
                         record["usage"] = usage
-                        prediction = validate_prediction(raw, request)
+                        prediction = (
+                            decode(raw, request, mapping)
+                            if mapping is not None
+                            else validate_prediction(raw, request)
+                        )
                         await self.runtime.verify(lock)
                         reasons = ["ROUTER_ABSTAIN"] if prediction.status == "abstain" else []
                         return finish(prediction, "gemma", reasons)

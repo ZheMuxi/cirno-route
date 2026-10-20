@@ -1,5 +1,14 @@
 {
   "schema_version": "1",
+  "candidate_source": "pi",
+  "batch_size": 8,
+  "batch_max_bytes": 28000,
+  "pricing_file": "model-prices.json",
+  "price_preference": "balanced",
+  "price_preference_file": "../.runtime/router-preferences.json",
+  "research_names": {
+    "cirno-local/cirno-gemma-e4b": "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:Q4_K_M"
+  },
   "classifier_url": "http://127.0.0.1:18081",
   "classifier_token_file": "../.runtime/api.token",
   "gateway_url": "http://127.0.0.1:8045/v1",

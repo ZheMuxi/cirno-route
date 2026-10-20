@@ -1,6 +1,107 @@
 {
+  "$defs": {
+    "ResearchSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "base_url": {
+          "default": "https://api.deepseek.com/v1",
+          "title": "Base Url",
+          "type": "string"
+        },
+        "model": {
+          "default": "deepseek-flash",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "api_key_env": {
+          "default": "DEEPSEEK_API_KEY",
+          "title": "Api Key Env",
+          "type": "string"
+        },
+        "api_key_file": {
+          "default": ".runtime/deepseek.token",
+          "title": "Api Key File",
+          "type": "string"
+        },
+        "search_base_url": {
+          "default": "https://api.deepseek.com/v1/tools",
+          "title": "Search Base Url",
+          "type": "string"
+        },
+        "search_api_key_env": {
+          "default": "DEEPSEEK_API_KEY",
+          "title": "Search Api Key Env",
+          "type": "string"
+        },
+        "search_api_key_file": {
+          "default": ".runtime/deepseek.token",
+          "title": "Search Api Key File",
+          "type": "string"
+        },
+        "cache_dir": {
+          "default": ".runtime/model-capabilities",
+          "title": "Cache Dir",
+          "type": "string"
+        },
+        "ttl_hours": {
+          "default": 168,
+          "maximum": 720,
+          "minimum": 1,
+          "title": "Ttl Hours",
+          "type": "integer"
+        },
+        "unknown_ttl_hours": {
+          "default": 1,
+          "maximum": 24,
+          "minimum": 1,
+          "title": "Unknown Ttl Hours",
+          "type": "integer"
+        },
+        "concurrency": {
+          "default": 2,
+          "maximum": 4,
+          "minimum": 1,
+          "title": "Concurrency",
+          "type": "integer"
+        },
+        "search_count": {
+          "default": 3,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Search Count",
+          "type": "integer"
+        },
+        "timeout_seconds": {
+          "default": 60.0,
+          "exclusiveMinimum": 0,
+          "maximum": 180,
+          "title": "Timeout Seconds",
+          "type": "number"
+        },
+        "failure_retry_seconds": {
+          "default": 300,
+          "maximum": 3600,
+          "minimum": 30,
+          "title": "Failure Retry Seconds",
+          "type": "integer"
+        }
+      },
+      "title": "ResearchSettings",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
+    "capability_research": {
+      "$ref": "#/$defs/ResearchSettings"
+    },
     "schema_version": {
       "default": "1",
       "title": "Schema Version",
@@ -65,6 +166,11 @@
       "minimum": 0,
       "title": "Format Retries",
       "type": "integer"
+    },
+    "compact_protocol": {
+      "default": false,
+      "title": "Compact Protocol",
+      "type": "boolean"
     },
     "fallback_order": {
       "items": {

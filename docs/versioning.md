@@ -2,13 +2,20 @@
 
 仓库：https://github.com/ZheMuxi/cirno-route （私有）。
 
+## 提交授权
+
+用户明确要求：**只有在用户要求提交本项目时，才整理版本记录、完成测试、提交并推送 GitHub，保留可回退版本。不要自行提交。**
+
+普通开发请求不包含提交授权，之前的提交授权不自动延续到后续修改。未获授权时保留本地改动并汇报，不自动暂存、提交、推送、合并或发布。必要测试失败或无法完成时先报告并解决；接受已有基线失败也须由用户明确决定。以下提交与发布步骤均以本次获得用户明确授权为前提，完整约定见 `../AGENTS.md`。
+
 ## 当前版本
 
-- `v0.1.1`：当前 V2 单次分类实现。提示词 `router-system-v2.txt`，SHA-256 为 `6fed39a057ef5e90be1f0be0a213ec900c6b8a698c2d520c8773613b3895d266`。
+- `v0.2.0`：当前版本，包含能力研究、V2 紧凑分批分类、价格偏好与 Pi 实际路由。变更、验证及限制见 [版本说明](../releases/v0.2.0.md)。
+- `v0.1.1`：前一版 V2 单次分类实现，是本次发布的回退目标。与当前版本共用提示词 `router-system-v2.txt`，SHA-256 为 `6fed39a057ef5e90be1f0be0a213ec900c6b8a698c2d520c8773613b3895d266`。
 - `v0.1.0-v3-baseline`：切换前的 V3 完整源码快照，保留用于回退和比较。
 - Python 项目、模块与 Pi 插件共同使用项目版本；提示词 V2/V3 独立编号。发布标签固定，后续修复另发新版本。
 - 实际机器上的密钥、会话、模型缓存与日志保留在 `.runtime/`、`../Pi/.state/`、已有模型缓存中，不进入 Git，也不随代码版本回退。
-- `releases/v0.1.1.json` 记录当前发布的文件哈希、运行时锁定信息及验证结果。实际 GGUF 和 llama.cpp 下载由 `resources/local-runtime-v1.json` 固定并校验。
+- `releases/v0.2.0.md` 记录当前版本的运行时、关键文件哈希和验证摘要；`releases/v0.1.1.json` 保留前版发布记录。实际 GGUF 和 llama.cpp 下载由 `src/cirno_route/resources/local-runtime-v1.json` 固定并校验。
 
 ## 2026-10-20 恢复验证
 
@@ -19,7 +26,7 @@
 
 ## 开发与发布
 
-1. 从 `main` 创建短期功能分支，小步提交；不要直接移动历史标签。
+1. 从 `main` 创建短期功能分支，在用户明确要求提交后整理提交；不要直接移动历史标签。
 2. GitHub Pull Request 运行 Checks，通过后合入 `main`。当前没有配置强制分支保护，流程需要主动遵守。
 3. 修改分类流程或评分规则时，另外在本机运行真实 Gemma 固定评测和 Pi smoke。GitHub CI 不包含模型权重，不声称验证了真实模型分类质量。
 4. 更新 `pyproject.toml`、`src/cirno_route/__init__.py`、Pi 插件 `package.json` 和 `uv.lock` 的项目版本，记录 CHANGELOG 与评测结果，然后建立注释标签。
@@ -33,32 +40,32 @@ uv sync --frozen --python 3.12
 .venv/bin/ruff format --check .
 .venv/bin/pytest -q
 node --test packages/pi-extension/*.test.mjs
-.venv/bin/python scripts/pi-prompt-smoke.py
-.venv/bin/python scripts/evaluate-prompts.py --versions v2 --split all --output .runtime/v2-new-evaluation.json
+.venv/bin/python scripts/pi-routing-smoke.py
+.venv/bin/python scripts/benchmark-classifier.py --fixtures --modes compact --output .runtime/compact-new-evaluation.json
 ```
 
-评测输出文件必须是新路径。语义失败会写入报告；不能只看脚本退出码判断质量。V2 的已知缺资料/顺序问题如实记录，不能通过删除失败用例获得“全部通过”。
+评测输出文件必须是新路径。语义失败会写入报告；不能只看脚本退出码判断质量。V2 的已知缺资料/顺序问题如实记录，不能通过删除失败用例获得“全部通过”。当前目录模式应使用 `pi-routing-smoke.py`；历史 `pi-prompt-smoke.py` 的三候选、单次推理断言仅适用于旧配置。若用户要求不留测试文件，将脚本所需工作目录和输出重定向到临时目录，结束后清理，只把验证摘要写入用户授权的版本说明。
 
 ## 本机回退
 
 这是源码及锁定依赖的人工回退流程，尚未实现自动发布目录切换。开始前退出 Pi，并停止自己启动的独立分类 HTTP 服务；不要终止其他应用的 llama.cpp 服务。
 
-1. 在项目目录运行 `git status --short`，必须没有未提交文件。有开发改动时先保存到自己的分支并提交，勿用 `reset --hard` 或 `clean` 丢弃。
-2. 执行以下命令选择需要的完整版本，例如切换前的 V3：
+1. 在项目目录运行 `git status --short`，必须没有未提交文件。有开发改动时先保留现场，明确保存方式；未经用户要求，不为回退自行创建提交，勿用 `reset --hard` 或 `clean` 丢弃改动。
+2. 执行以下命令回到前一版 V2 分类实现：
 
 ```bash
 cd /Users/zhemuxi/CirnoRoute/cirno-route
 git fetch origin --tags
-git switch --detach v0.1.0-v3-baseline
+git switch --detach v0.1.1
 uv sync --frozen --python 3.12
 ```
 
-3. 这两个已保存版本的 Pi 依赖清单相同，现有 `../Pi` 可直接复用。以后切到不同 Pi 依赖版本时，用该版本的安装脚本同步；V3 基线没有安装脚本，可用 `tooling/pi/package*.json` 配合 `npm ci --prefix ../Pi` 恢复。
-4. 从 `/Users/zhemuxi/CirnoRoute/Pi/pi-classifier` 重新启动，使用 `/classify` 实际验证。普通输入自动分类需重新输入 `/bakarouter`。不要沿用切换前仍存活的 Python worker。
+3. `v0.2.0` 与 `v0.1.1` 的 Pi 依赖清单相同，现有 `../Pi` 可直接复用。以后切到不同 Pi 依赖版本时，用该版本的安装脚本同步；更早的 `v0.1.0-v3-baseline` 也保留，但没有安装脚本，可用 `tooling/pi/package*.json` 配合 `npm ci --prefix ../Pi` 恢复。
+4. 从 `/Users/zhemuxi/CirnoRoute/Pi/pi-classifier` 重新启动，使用 `/classify` 实际验证。`v0.1.1` 的 `/bakarouter` 只分类，不自动切换回答模型；`v0.2.0` 才会实际路由。开关每次需重新开启。不要沿用切换前仍存活的 Python worker；价格偏好和能力缓存保留在本机，回退不删除。
 5. 回到当前已发布 V2 版本：
 
 ```bash
-git switch --detach v0.1.1
+git switch --detach v0.2.0
 uv sync --frozen --python 3.12
 ```
 
@@ -72,4 +79,4 @@ uv sync --frozen --python 3.12
 - 合法弃权不是故障；不能因单次评分不理想就自动回退。
 - 保留全部发布标签，至少保留最近三个可用版本需要的模型与运行时缓存；不要清理唯一可用的旧模型副本。
 - 回退目标先执行自动化与真实分类 smoke，失败时返回先前可用标签。保留失败日志，不覆盖既有评测报告。
-- 当前阶段只有分类功能，没有用户习惯库或数据库迁移。
+- 当前阶段包含分类、能力资料缓存及显式价格偏好驱动的实际路由，没有用户习惯库或数据库迁移。

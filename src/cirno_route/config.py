@@ -5,9 +5,11 @@ from urllib.parse import urlsplit
 from pydantic import Field, field_validator
 
 from .contracts import Contract, Identifier
+from .research import ResearchSettings
 
 
 class Settings(Contract):
+    capability_research: ResearchSettings = Field(default_factory=ResearchSettings)
     schema_version: str = "1"
     runtime_url: str = "http://127.0.0.1:18080"
     model: str = "cirno-gemma-e4b"
@@ -19,6 +21,7 @@ class Settings(Contract):
     context_tokens: int = Field(default=8192, ge=4096, le=32768)
     max_input_bytes: int = Field(default=10000, ge=256, le=100000)
     format_retries: int = Field(default=1, ge=0, le=1)
+    compact_protocol: bool = False
     fallback_order: list[Identifier] = Field(default_factory=list)
     lock_file: str = ".runtime/model-lock.json"
 
@@ -52,4 +55,7 @@ def load_settings(path: Path) -> Settings:
     # Runtime paths are relative to the configuration, never to an arbitrary working folder.
     for name in ("lock_file", "runtime_token_file", "api_token_file"):
         setattr(settings, name, str((path.resolve().parent / getattr(settings, name)).resolve()))
+    for name in ("api_key_file", "search_api_key_file", "cache_dir"):
+        research = settings.capability_research
+        setattr(research, name, str((path.resolve().parent / getattr(research, name)).resolve()))
     return settings
