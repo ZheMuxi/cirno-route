@@ -19,12 +19,12 @@ async def test_success_preserves_candidate_evidence_and_metadata(settings, task,
     assert "task" not in result.metadata
 
 
-async def test_default_uses_v2_prompt_and_one_public_contract_call(settings, task, prediction):
+async def test_default_uses_v2_1_prompt_and_one_public_contract_call(settings, task, prediction):
     runtime = FakeRuntime(json.dumps(prediction))
     result = await Classifier(settings, runtime).classify(task)
     assert result.source == "gemma"
     assert result.metadata["pipeline_version"] == "v2"
-    assert PROMPT_VERSION == result.metadata["router_prompt_version"] == "router-system-v2"
+    assert PROMPT_VERSION == result.metadata["router_prompt_version"] == "router-system-v2.1"
     assert len(runtime.calls) == 1
     assert runtime.calls[0][0]["content"].startswith(PROMPT + "\nJSON Schema:")
     assert json.loads(runtime.calls[0][1]["content"]) == task.model_dump()

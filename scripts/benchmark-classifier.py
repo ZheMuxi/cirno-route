@@ -33,7 +33,9 @@ async def run(args):
     def save():
         output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
 
-    manager = ManagedClassifier(load_settings(ROOT / "config.json"), ROOT / ".runtime")
+    manager = ManagedClassifier(
+        load_settings(ROOT / "config.json"), ROOT / ".runtime", backend=args.backend
+    )
     previous = {"full": {}, "compact": {}}
     try:
         start = time.monotonic()
@@ -144,6 +146,9 @@ if __name__ == "__main__":
         "--task", default="用 Python 实现归并排序，包含空列表和重复元素的单元测试。"
     )
     parser.add_argument("--batch-size", type=int, choices=range(1, 9), default=8)
+    parser.add_argument(
+        "--backend", choices=("node-llama-cpp", "llama-server"), default="node-llama-cpp"
+    )
     parser.add_argument("--repeats", type=int, choices=range(1, 6), default=2)
     parser.add_argument("--fixtures", action="store_true")
     parser.add_argument(

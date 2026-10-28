@@ -9,6 +9,7 @@ const stages = {
   'downloading-runtime': '下载 llama.cpp',
   'downloading-model': '下载 Gemma 权重',
   'starting-model': '加载本地 Gemma…',
+  'starting-native-model': '通过 node-llama-cpp 加载本地 Gemma…',
   'checking-model': '校验模型与模板…',
   'researching-models': '查询并整理模型能力资料',
   ready: 'Gemma 分类中…',
@@ -19,6 +20,7 @@ export class LocalBackend {
     this.project = project;
     this.command = command ?? join(project, '.venv/bin/python');
     this.args = args ?? ['-m', 'cirno_route.worker', '--config', join(project, 'config.json'),
+      '--backend', process.env.CIRNO_LOCAL_BACKEND ?? 'node-llama-cpp',
       ...(process.env.CIRNO_RUNTIME_REUSE === '0' ? ['--no-reuse'] : [])];
     this.timeoutMs = timeoutMs;
     this.child = null;
@@ -34,6 +36,7 @@ export class LocalBackend {
     try {
       child = spawn(this.command, this.args, {
         cwd: this.project, detached: true, stdio: ['pipe', 'pipe', log],
+        env: { ...process.env, CIRNO_NODE_BIN: process.execPath },
       });
     } finally { closeSync(log); }
     this.child = child;

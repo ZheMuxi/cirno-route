@@ -1,11 +1,14 @@
+import asyncio
 import hashlib
 import json
+import sys
 
 import httpx
 import pytest
 
 from cirno_route.config import Settings
 from cirno_route.errors import ClassifierError
+from cirno_route.node_runtime import NodeRuntime
 from cirno_route.runtime import LlamaRuntime
 
 
@@ -169,3 +172,61 @@ async def test_model_lock_checks_hash_template_build_and_file_changes(tmp_path, 
         model.write_bytes(b"replaced weights")
         with pytest.raises(ClassifierError, match="MODEL_VERSION_MISMATCH"):
             await runtime.verify(lock)
+
+
+async def native_pipe(settings, behavior):
+    runtime = NodeRuntime(settings)
+    code = "import sys,json,time\nfor line in sys.stdin:\n p=json.loads(line)\n " + behavior
+    runtime.process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-u",
+        "-c",
+        code,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+    )
+    return runtime
+
+
+async def test_native_pipe_checks_reply_identity(settings):
+    runtime = await native_pipe(
+        settings, "print(json.dumps({'id':'wrong','result':{}}),flush=True)"
+    )
+    try:
+        with pytest.raises(ClassifierError, match="RUNTIME_INVALID_RESPONSE"):
+            await runtime.rpc("snapshot")
+    finally:
+        await runtime.close()
+
+
+async def test_native_timeout_reaps_process_and_discards_late_reply(settings):
+    runtime = await native_pipe(settings, "time.sleep(30)")
+    process = runtime.process
+    try:
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(0.05):
+                await runtime.rpc("complete")
+        assert process.returncode is not None
+        assert runtime.process is None
+        with pytest.raises(ClassifierError, match="MODEL_UNAVAILABLE"):
+            await runtime.rpc("snapshot")
+    finally:
+        await runtime.close()
+
+
+async def test_native_complete_preserves_messages_schema_and_unknown_usage(settings):
+    runtime = await native_pipe(
+        settings,
+        "assert p['method']=='complete' and p['body']['schema']=={'const':'safe'}; "
+        "assert p['body']['messages']==[{'role':'user','content':'test'}]; "
+        "print(json.dumps({'id':p['id'],'result':{'text':'\\\"safe\\\"',"
+        "'usage':{'prompt_tokens':True,'completion_tokens':-1}}}),flush=True)",
+    )
+    try:
+        text, usage = await runtime.complete(
+            [{"role": "user", "content": "test"}], {"const": "safe"}
+        )
+        assert text == '"safe"'
+        assert usage == {"prompt_tokens": None, "completion_tokens": None}
+    finally:
+        await runtime.close()

@@ -17,6 +17,7 @@ from .cli import private_write
 from .config import Settings, load_settings
 from .contracts import ClassifyRequest, RuntimeLock
 from .errors import ClassifierError
+from .node_runtime import NodeRuntime
 from .provision import MANIFEST, ensure_binary, ensure_model, provision_lock
 from .research import CapabilityResearch, ResearchRequest
 from .runtime import LlamaRuntime, read_token
@@ -24,7 +25,9 @@ from .validation import strict_json
 
 
 class ManagedClassifier:
-    def __init__(self, settings, directory, *, reuse_existing=True):
+    def __init__(self, settings, directory, *, reuse_existing=True, backend="node-llama-cpp"):
+        if backend not in {"llama-server", "node-llama-cpp"}:
+            raise ValueError("unsupported local backend")
         self.original = settings
         self.settings = settings.model_copy(deep=True)
         self.directory = directory
@@ -33,6 +36,7 @@ class ManagedClassifier:
         self.runtime = None
         self.classifier = None
         self.mode = None
+        self.backend = backend
 
     async def ensure(self, progress):
         if self.classifier is not None:
@@ -43,6 +47,9 @@ class ManagedClassifier:
         if self.original.checkpoint != Settings().checkpoint:
             raise ClassifierError("AUTO_INSTALL_CHECKPOINT_UNSUPPORTED")
         self.settings = self.original.model_copy(deep=True)
+        if self.backend == "node-llama-cpp":
+            await self.ensure_native(progress)
+            return
         if self.reuse_existing:
             try:
                 lock = RuntimeLock.model_validate_json(
@@ -145,6 +152,29 @@ class ManagedClassifier:
             self.mode = "managed"
             progress("ready", mode=self.mode)
 
+    async def ensure_native(self, progress):
+        async with provision_lock(self.directory, progress):
+            model = await ensure_model(self.settings, self.directory, progress)
+            self.settings.lock_file = str(self.directory / "native-model-lock.json")
+            self.runtime = NodeRuntime(self.settings)
+            progress("starting-native-model")
+            await self.runtime.start(model)
+            self.process = self.runtime.process
+            progress("checking-model")
+            try:
+                lock = RuntimeLock.model_validate_json(
+                    await asyncio.to_thread(Path(self.settings.lock_file).read_text)
+                )
+                await self.runtime.verify(lock)
+            except (OSError, ValueError, ClassifierError):
+                lock = await self.runtime.lock_model()
+            if lock.model_digest != MANIFEST["model"]["sha256"]:
+                raise ClassifierError("DOWNLOADED_RUNTIME_INVALID")
+            private_write(Path(self.settings.lock_file), lock.model_dump_json(indent=2) + "\n")
+            self.classifier = Classifier(self.settings, self.runtime)
+            self.mode = "node-llama-cpp"
+            progress("ready", mode=self.mode)
+
     async def classify(self, request, progress):
         try:
             async with asyncio.timeout(7200):
@@ -153,8 +183,12 @@ class ManagedClassifier:
             result.metadata["local_backend"] = {
                 "mode": self.mode,
                 "pid": self.process.pid if self.process else None,
-                "runtime_url": self.settings.runtime_url,
+                "runtime_url": None
+                if self.backend == "node-llama-cpp"
+                else self.settings.runtime_url,
             }
+            if self.backend == "node-llama-cpp":
+                result.metadata["local_backend"]["gpu"] = self.runtime.info["gpu"]
             if result.source == "rules" and "MODEL_UNAVAILABLE" in result.reason_codes:
                 await self.close()  # The next request can rebuild a disappeared backend.
             return result.model_dump()
@@ -184,8 +218,8 @@ def emit(value):
     print(json.dumps(value, ensure_ascii=False), flush=True)
 
 
-async def serve(settings, directory, *, reuse_existing=True):
-    backend = ManagedClassifier(settings, directory, reuse_existing=reuse_existing)
+async def serve(settings, directory, *, reuse_existing=True, backend="node-llama-cpp"):
+    backend = ManagedClassifier(settings, directory, reuse_existing=reuse_existing, backend=backend)
     research = CapabilityResearch(settings.capability_research)
     loop = asyncio.get_running_loop()
     stop = asyncio.Event()
@@ -262,6 +296,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--no-reuse", action="store_true")
+    parser.add_argument(
+        "--backend", choices=["llama-server", "node-llama-cpp"], default="node-llama-cpp"
+    )
     args = parser.parse_args()
     os.umask(0o077)
     try:
@@ -271,6 +308,7 @@ def main():
                 settings,
                 args.config.resolve().parent / ".runtime",
                 reuse_existing=not args.no_reuse,
+                backend=args.backend,
             )
         )
     except Exception:

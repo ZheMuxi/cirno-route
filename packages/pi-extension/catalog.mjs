@@ -167,6 +167,8 @@ export async function classifyCatalog(cfg, text, {
     candidate_cards_sha256: hash(cards), pipeline_version: 'v2',
     prompt_sha256: results[0]?.prompt_sha256 ?? null,
     classifier_model: results[0]?.classifier_model ?? null,
+    runtime_version: results[0]?.runtime_version ?? null,
+    local_backend: results[0]?.local_backend ?? null,
     model_digest: results[0]?.model_digest ?? null,
     usage: results.flatMap(r => r.usage), batch_count: batches.length,
     context_splits: contextSplits, wire_format: results[0]?.wire_format ?? null,

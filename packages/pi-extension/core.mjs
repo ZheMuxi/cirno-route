@@ -144,6 +144,7 @@ export function summarize(result) {
       return ['supported', 'unsupported', 'insufficient'].includes(state) ? [[c.candidate_id, state]] : [];
     })),
     classifier_model: result.metadata?.verified_runtime?.model ?? null,
+    runtime_version: result.metadata?.verified_runtime?.runtime_version ?? null,
     model_digest: result.metadata?.verified_runtime?.model_digest ?? null,
     local_backend: result.metadata?.local_backend ?? null,
   };
@@ -176,6 +177,7 @@ export async function classify(cfg, text, { signal, images = false, localClassif
 export function formatResult(result) {
   if (result.error) return `本地分类不可用：${result.error}`;
   const lines = [`本地分类：${result.status} · ${result.source} · ${result.latency_ms ?? '?'} ms`];
+  if (result.local_backend?.mode === 'node-llama-cpp') lines.push('分类后端：node-llama-cpp（插件内置原生库）');
   if (result.input_status === 'missing') lines.push('资料检查：缺少完成任务所必需的输入。');
   else if (Object.values(result.candidate_evidence_status ?? {}).includes('insufficient')) lines.push('资料检查：部分候选的能力证据不足，保留其他有依据的评分。');
   if (result.research) lines.push(`联网能力资料：${result.research.documented}/${result.research.total} 有依据 · ${result.research.cache_hits} 命中缓存 · ${result.batch_count} 批分类`);
