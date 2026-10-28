@@ -21,7 +21,7 @@ from .errors import ClassifierError
 from .runtime import LlamaRuntime, sha256
 from .validation import validate_prediction
 
-PROMPT_VERSION = "router-system-v2"
+PROMPT_VERSION = "router-system-v2.1"
 PROMPT = files("cirno_route").joinpath(f"resources/{PROMPT_VERSION}.txt").read_text()
 OUTPUT_SCHEMA = RouterPrediction.model_json_schema()
 

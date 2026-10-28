@@ -1,5 +1,7 @@
 # Pi 内置管理的本地模型后台
 
+v0.3.0 默认使用 [node-llama-cpp 原生后端](native-runtime.md)，直接通过库推理、不监听 HTTP 端口。本文保留 `llama-server` 后端的操作和历史验证，使用明确的旧后端入口启动。
+
 实现日期：2026-10-14。已在 macOS Apple Silicon 与 Pi 1.2.0 上验证；自动下载的平台范围见下文。
 
 ## 使用
@@ -7,7 +9,7 @@
 先完成 [README](../README.md) 中的环境安装和凭据配置，再从仓库根目录启动 Pi：
 
 ```bash
-./scripts/start-pi.sh
+./scripts/start-pi-llama.sh
 ```
 
 已打开的 Pi 输入 `/reload` 加载更新。
@@ -64,7 +66,7 @@ Python 虚拟环境、Node.js 和 Pi 必须先按 README 安装；自动准备�
 `CIRNO_RUNTIME_REUSE=0` 可用于验证完全由插件启动的私有服务，不复用独立启动的默认 18080 服务。例如：
 
 ```bash
-CIRNO_RUNTIME_REUSE=0 ./scripts/start-pi.sh
+CIRNO_RUNTIME_REUSE=0 ./scripts/start-pi-llama.sh
 ```
 
 已配置网关用于读取对应 provider 的候选目录，并处理选择该 provider 时的正常回答。`http://127.0.0.1:8045/v1` 是模板示例，需替换为自己提供的回环服务，并同步 Pi provider 配置。项目不附带网关程序。
@@ -87,8 +89,8 @@ node --test packages/pi-extension/*.test.mjs
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
 # 真实模型测试（需要自己的执行服务和凭据）：
-CIRNO_RUNTIME_REUSE=0 .venv/bin/python scripts/pi-routing-smoke.py
-.venv/bin/python scripts/pi-managed-lifecycle-smoke.py
+CIRNO_LOCAL_BACKEND=llama-server CIRNO_RUNTIME_REUSE=0 .venv/bin/python scripts/pi-routing-smoke.py
+CIRNO_LOCAL_BACKEND=llama-server .venv/bin/python scripts/pi-managed-lifecycle-smoke.py
 ```
 
 冷启动与进程清理记录在 `.runtime/pi-managed-report.json`；热复用与父进程异常退出记录在 `.runtime/pi-managed-lifecycle-report.json`。报告由复测脚本生成，均被 Git 忽略且不随源码分发。这些是功能验证，不是分类准确率评估。

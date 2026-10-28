@@ -103,7 +103,9 @@ async def run(args):
     def save():
         output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
 
-    manager = ManagedClassifier(load_settings(ROOT / "config.json"), ROOT / ".runtime")
+    manager = ManagedClassifier(
+        load_settings(ROOT / "config.json"), ROOT / ".runtime", backend=args.backend
+    )
     previous = {name: {} for name in prompts}
     try:
         await manager.ensure(lambda stage, **details: print(stage, details, flush=True))
@@ -168,6 +170,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--split", choices=("dev", "validation", "order", "all"), required=True)
     parser.add_argument("--output", required=True, help="New report file relative to project root")
-    parser.add_argument("--versions", nargs="+", choices=("v1", "v2"), default=["v1", "v2"])
+    parser.add_argument("--versions", nargs="+", choices=("v1", "v2", "v2.1"), default=["v1", "v2"])
+    parser.add_argument(
+        "--backend", choices=("node-llama-cpp", "llama-server"), default="node-llama-cpp"
+    )
     parser.add_argument("--fixture", default="evals/prompt-cases/task-fit-v1.json")
     asyncio.run(run(parser.parse_args()))

@@ -48,7 +48,7 @@ v0.2.0 新增联网能力研究与完整 Pi 目录分批分类。使用 `/bakamo
 
 ## 模型、接口与凭据
 
-- 分类运行时：本地 `cirno-gemma-e4b`。可复用已验证的18080服务，或由插件启动随机回环端口的私有 llama.cpp。
+- 分类运行时：本地 `cirno-gemma-e4b`，默认由插件内置的 `node-llama-cpp` 加载，不监听推理端口。通过 `scripts/start-pi-llama.sh` 显式选择旧后端时，可复用已验证的 18080 服务，或由插件启动随机回环端口的私有 llama.cpp。详见 [原生后端](native-runtime.md)。
 - Pi 通过管道调用 Python 分类后台，不依赖分类 HTTP API；18081仍可作为独立开发接口使用。
 - 网关接口由 `config/pi-classifier.json` 的 `gateway_url` 配置，并与 Pi provider 的 `baseUrl` 保持一致；`http://127.0.0.1:8045/v1` 仅为模板示例。目录查询只允许字面回环 HTTP 地址。密钥保存在 `.runtime/gateway.token`，权限 0600；`.runtime` 为 0700。
 - Pi 的 `.state/models.json` 使用 `"apiKey": "CIRNO_GATEWAY_API_KEY"` 引用环境变量，启动器读取密钥；不在源码或报告中记录密钥值。
@@ -68,7 +68,7 @@ v0.2.0 新增联网能力研究与完整 Pi 目录分批分类。使用 `/bakamo
 
 ## 已完成实测
 
-下表是初次接入时使用 V1 提示词的历史记录。当前使用 V2 评分规则，每批独立分类，见 [V2 评测记录](prompt-evaluation.md)。Pi 中执行 `/reload` 或重启可加载新版；如需普通输入自动分类，再输入 `/bakarouter`。
+下表是初次接入时使用 V1 提示词的历史记录。当前工作区使用 V2.1 评分标准，每批独立分类，见 [V2 评测记录](prompt-evaluation.md)。Pi 中执行 `/reload` 或重启可加载新版；如需普通输入自动分类，再输入 `/bakarouter`。
 
 以下请求由真正的 Pi 加载扩展，并调用已锁定的本地 Gemma 生成。普通输入用例在自动分类开启时运行；历史三候选复测脚本会先输入 `/bakarouter`。不是模拟返回或固定分类表。
 

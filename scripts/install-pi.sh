@@ -21,4 +21,5 @@ MODULES="$PROJECT_DIR/packages/pi-extension/node_modules"
 if [ ! -e "$MODULES" ] && [ ! -L "$MODULES" ]; then
   ln -s ../../../Pi/node_modules "$MODULES"
 fi
+"$PROJECT_DIR/scripts/install-native-runtime.sh"
 printf '%s\n' "Pi installed at $PI_DIR. Existing configuration and sessions preserved."

@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalBackend } from './local-backend.mjs';
+import { nativeSchema } from './native-runtime/schema.mjs';
 
 function fixture(t, { stall = false } = {}) {
   const project = mkdtempSync(join(tmpdir(), 'cirno-backend-'));
@@ -71,4 +72,37 @@ test('oversized catalog is rejected before spawning the worker or truncating std
   const backend = fixture(t);
   await assert.rejects(backend.research({ name: '中'.repeat(21000) }), /REQUEST_TOO_LARGE/);
   assert.equal(backend.child, null);
+});
+
+test('native backend is the default and the server remains explicitly selectable', () => {
+  const saved = process.env.CIRNO_LOCAL_BACKEND;
+  try {
+    delete process.env.CIRNO_LOCAL_BACKEND;
+    let backend = new LocalBackend('/example');
+    assert.equal(backend.args[backend.args.indexOf('--backend') + 1], 'node-llama-cpp');
+    process.env.CIRNO_LOCAL_BACKEND = 'llama-server';
+    backend = new LocalBackend('/example');
+    assert.equal(backend.args[backend.args.indexOf('--backend') + 1], 'llama-server');
+    assert.equal(backend.child, null);
+  } finally {
+    if (saved === undefined) delete process.env.CIRNO_LOCAL_BACKEND;
+    else process.env.CIRNO_LOCAL_BACKEND = saved;
+  }
+});
+
+test('native grammar retains score bounds, tuple length and allowed evidence', () => {
+  const schema = { type: 'object', additionalProperties: false, required: ['c0'], properties: {
+    c0: { type: 'array', minItems: 2, maxItems: 2, prefixItems: [
+      { anyOf: [{ type: 'integer', minimum: 0, maximum: 4 }, { type: 'null' }] },
+      { type: 'array', items: { type: 'string', enum: ['e0'] }, maxItems: 1 },
+    ] },
+  } };
+  const grammar = nativeSchema(schema);
+  assert.deepEqual(grammar.properties.c0.prefixItems[0], { oneOf: [{ enum: [0, 1, 2, 3, 4] }, { type: 'null' }] });
+  assert.deepEqual(grammar.properties.c0.prefixItems[1].items, { enum: ['e0'] });
+  assert.equal(grammar.properties.c0.maxItems, 2);
+  assert.equal(grammar.additionalProperties, false);
+  assert.equal(schema.properties.c0.prefixItems[0].anyOf[0].maximum, 4);
+  assert.throws(() => nativeSchema({ type: 'object', properties: { optional: { type: 'string' } } }), /NATIVE_SCHEMA_UNSUPPORTED/);
+  assert.throws(() => nativeSchema({ $ref: '#/unknown' }), /NATIVE_SCHEMA_UNSUPPORTED/);
 });
