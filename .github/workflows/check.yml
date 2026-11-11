@@ -29,3 +29,5 @@ jobs:
       - run: ./scripts/install-pi.sh
       - run: node --test packages/pi-extension/*.test.mjs
       - run: node --check packages/pi-extension/native-runtime/runtime.mjs
+      - run: node --check packages/pi-extension/semantic-runtime/runtime.mjs
+      - run: node --check packages/pi-extension/semantic-runtime/compact-tokenizer.mjs

@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { ClassifierError } from './core.mjs';
 
 const stages = {
+  'downloading-semantic-model': '下载多语言匹配模型（首次约 135 MB）…',
+  'loading-semantic-model': '加载多语言任务匹配模型…',
   'waiting-for-download': '等待其他 Pi 完成依赖准备…',
   'downloading-runtime': '下载 llama.cpp',
   'downloading-model': '下载 Gemma 权重',
@@ -16,13 +18,14 @@ const stages = {
 };
 
 export class LocalBackend {
-  constructor(project, { command, args, timeoutMs = 7200000 } = {}) {
+  constructor(project, { command, args, env, timeoutMs = 7200000 } = {}) {
     this.project = project;
     this.command = command ?? join(project, '.venv/bin/python');
     this.args = args ?? ['-m', 'cirno_route.worker', '--config', join(project, 'config.json'),
       '--backend', process.env.CIRNO_LOCAL_BACKEND ?? 'node-llama-cpp',
       ...(process.env.CIRNO_RUNTIME_REUSE === '0' ? ['--no-reuse'] : [])];
     this.timeoutMs = timeoutMs;
+    this.env = env;
     this.child = null;
     this.pending = null;
     this.closing = null;
@@ -36,7 +39,7 @@ export class LocalBackend {
     try {
       child = spawn(this.command, this.args, {
         cwd: this.project, detached: true, stdio: ['pipe', 'pipe', log],
-        env: { ...process.env, CIRNO_NODE_BIN: process.execPath },
+        env: { ...process.env, CIRNO_NODE_BIN: process.execPath, ...this.env },
       });
     } finally { closeSync(log); }
     this.child = child;

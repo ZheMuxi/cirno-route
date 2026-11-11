@@ -26,6 +26,14 @@ export function readConfig(file) {
   if (cfg.batch_max_bytes !== undefined && (!Number.isInteger(cfg.batch_max_bytes) ||
       cfg.batch_max_bytes < 1000 || cfg.batch_max_bytes > 58000)) fail('INVALID_CONFIG');
   if (cfg.price_preference !== undefined && !priceMode(cfg.price_preference)) fail('INVALID_CONFIG');
+  if (cfg.habits !== undefined) {
+    const h = cfg.habits;
+    if (!h || typeof h.enabled !== 'boolean' || !Number.isInteger(h.threshold) || h.threshold < 1 || h.threshold > 1000
+      || typeof h.min_similarity !== 'number' || h.min_similarity < 0.9 || h.min_similarity > 1
+      || typeof h.min_margin !== 'number' || h.min_margin < 0.01 || h.min_margin > 0.2
+      || typeof h.file !== 'string' || !h.file || typeof h.cache !== 'string' || !h.cache) fail('INVALID_CONFIG');
+    h.file = resolve(dirname(file), h.file); h.cache = resolve(dirname(file), h.cache);
+  }
   for (const key of ['pricing_file', 'price_preference_file']) {
     if (cfg[key] !== undefined) {
       if (typeof cfg[key] !== 'string' || !cfg[key].trim()) fail('INVALID_CONFIG');
@@ -147,10 +155,11 @@ export function summarize(result) {
     runtime_version: result.metadata?.verified_runtime?.runtime_version ?? null,
     model_digest: result.metadata?.verified_runtime?.model_digest ?? null,
     local_backend: result.metadata?.local_backend ?? null,
+    task_profile: result.metadata?.task_profile ?? null,
   };
 }
 
-export async function classify(cfg, text, { signal, images = false, localClassify } = {}) {
+export async function classify(cfg, text, { signal, images = false, localClassify, includeTaskProfile = false } = {}) {
   if (images) fail('TEXT_ONLY_CLASSIFIER');
   if (typeof text !== 'string' || !text.trim()) fail('EMPTY_TASK');
   // Reject oversized inputs intact; do not silently drop the end of a task.
@@ -161,6 +170,7 @@ export async function classify(cfg, text, { signal, images = false, localClassif
   const candidates = cfg.candidates.filter(c => available.has(c.model));
   if (!candidates.length) fail('NO_ELIGIBLE_MODEL');
   const body = { schema_version: '1', task: { text }, eligible_candidates: candidates, relevant_preferences: [] };
+  if (includeTaskProfile) body.include_task_profile = true;
   if (Buffer.byteLength(JSON.stringify(body)) > 10000) fail('CONTEXT_TOO_LARGE');
   const result = localClassify
     ? await localClassify(body, signal)

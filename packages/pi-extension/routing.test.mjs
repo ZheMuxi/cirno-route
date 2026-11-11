@@ -1,8 +1,92 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { switchRecommendedModel } from './routing.mjs';
+import { switchRecommendedModel, switchHabitModel } from './routing.mjs';
+import { HabitStore, hash, habitScope, manualTaskProfile } from './habits.mjs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const original = { provider: 'p', id: 'manual' }, target = { provider: 'p', id: 'recommended' };
+const vector = (a = 1) => [a, Math.sqrt(1 - a * a), ...Array(382).fill(0)];
+const profile = { kind: 'code_implement', difficulty: 'routine', requirements: [], reusable: true };
+function habitStore(t) {
+  const dir = mkdtempSync(join(tmpdir(), 'cirno-habit-test-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  return new HabitStore({ file: join(dir, 'habits.json'), enabled: true, threshold: 5, min_similarity: 0.985, min_margin: 0.04 });
+}
+function sample(i, overrides = {}) {
+  return { id: String(i), source: 'gemma', scope: hash('scope'), profile, embedding: vector(),
+    taskHash: hash('private task ' + i), provider: target.provider, model: target.id, ...overrides };
+}
+
+test('habit learns five successes, is idempotent, and habit hits never reinforce or retain raw prompts', async t => {
+  const store = habitStore(t), scope = hash('scope');
+  for (let i = 0; i < 4; i++) await store.record(sample(i));
+  assert(!store.eligible(scope)); assert.equal(store.lookup(scope, vector()), null);
+  await store.record(sample(4));
+  assert.equal(store.lookup(scope, vector()).count, 5);
+  const raw = readFileSync(store.file, 'utf8');
+  await store.record(sample(4)); await store.record(sample(5, { source: 'habit' }));
+  assert.equal(readFileSync(store.file, 'utf8'), raw);
+  assert(!raw.includes('private task')); assert.equal(statSync(store.file).mode & 0o777, 0o600);
+  assert.deepEqual(readdirSync(join(store.file, '..')), ['habits.json']);
+});
+
+test('habit requires unique most-used model, isolates price/config scopes, and considers immature competing types', async t => {
+  const store = habitStore(t), scope = hash('scope');
+  for (let i = 0; i < 5; i++) await store.record(sample(i));
+  assert.equal(store.lookup(hash('other-price'), vector()), null);
+  for (let i = 5; i < 10; i++) await store.record(sample(i, { model: 'other' }));
+  assert.equal(store.lookup(scope, vector()), null); // 5:5 tie.
+  await store.record(sample(10)); assert.equal(store.lookup(scope, vector()).model, target.id);
+  await store.record(sample(11, { profile: { ...profile, kind: 'code_explain' }, embedding: vector(0.98) }));
+  assert.equal(store.lookup(scope, vector()), null); // Competing type has only one observation.
+  const book = { schema_version: '1', currency: 'USD', models: {} };
+  assert.notEqual(habitScope('cheap', book, [target]), habitScope('premium', book, [target]));
+  assert.equal(habitScope('balanced', book, [target, original]), habitScope('balanced', book, [original, target]));
+  assert.notEqual(habitScope('balanced', book, [target]), habitScope('balanced', book, [{ ...target, baseUrl: 'https://example.org' }]));
+});
+
+test('habit validates vectors and profiles, serializes concurrent writers, supports disabling and clearing', async t => {
+  const store = habitStore(t);
+  await assert.rejects(store.record(sample(0, { embedding: [1] })), /SEMANTIC|HABITS_RECORD_INVALID/);
+  await assert.rejects(store.record(sample(0, { profile: { ...profile, kind: 'unknown' } })), /HABITS_RECORD_INVALID/);
+  await Promise.all(Array.from({ length: 10 }, (_, i) => store.record(sample(i))));
+  assert.equal(store.read().groups[0].counts[0].count, 10);
+  await store.configure({ enabled: false }); await store.record(sample(11));
+  assert.equal(store.read().groups[0].counts[0].count, 10);
+  assert.equal(store.lookup(hash('scope'), vector()), null);
+  await assert.rejects(store.configure({ threshold: 0 }), /HABITS_THRESHOLD_INVALID/);
+  await store.configure({ clear: true, enabled: true, threshold: 7 });
+  assert.equal(store.read().groups.length, 0); assert.equal(store.read().threshold, 7);
+  writeFileSync(store.file, 'private invalid data');
+  assert.throws(() => store.read(), error => error.message === 'HABITS_FILE_INVALID');
+  await store.configure({ clear: true }); assert.equal(store.read().groups.length, 0);
+  await store.record(sample(20, { shouldRecord: () => false }));
+  assert.equal(store.read().groups.length, 0);
+});
+
+test('manual rules distinguish operation and reject ambiguous/context-dependent tasks', () => {
+  assert.equal(manualTaskProfile('写一个 Python 函数检查回文').kind, 'code_implement');
+  assert.equal(manualTaskProfile('证明素数有无限多个').kind, 'math_prove');
+  assert.equal(manualTaskProfile('Translate the following sentence: hello').kind, 'translate');
+  assert.equal(manualTaskProfile('继续修改上面的代码'), null);
+  assert.equal(manualTaskProfile('写一个函数然后解释它'), null);
+  assert.equal(manualTaskProfile('翻译下面的内容。'), null);
+});
+
+test('habit routing uses exact target with availability, cancellation and restoration guards', async () => {
+  const hit = { provider: target.provider, model: target.id, count: 5, threshold: 5 };
+  const h = harness();
+  assert.equal((await switchHabitModel(hit, 'balanced', h.options)).source, 'habit');
+  await assert.rejects(switchHabitModel({ ...hit, count: 4 }, 'balanced', h.options), /HABIT_NOT_READY/);
+  const missing = harness({ isAvailable: async () => false });
+  await assert.rejects(switchHabitModel(hit, 'balanced', missing.options), /ROUTER_MODEL_UNAVAILABLE/);
+  const stale = harness();
+  stale.options.setModel = async m => { stale.model = m; stale.active = false; return true; };
+  assert.equal((await switchHabitModel(hit, 'balanced', stale.options)).status, 'skipped');
+  assert.equal(stale.model, original);
+});
 const result = () => ({
   status: 'abstain', source: 'gemma', candidates: [
     { candidate_id: 'one', provider: target.provider, model: target.id, quality_level: 4, evidence_ids: ['e'] },

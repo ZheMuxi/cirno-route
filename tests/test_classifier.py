@@ -1,11 +1,61 @@
 import asyncio
 import json
 
+import pytest
 from conftest import FakeRuntime
 
 from cirno_route.classifier import PROMPT, PROMPT_VERSION, Classifier
+from cirno_route.compact import encode
 from cirno_route.errors import ClassifierError
 from cirno_route.runtime import sha256
+
+
+@pytest.mark.parametrize("compact", [False, True])
+async def test_opt_in_task_profile_uses_same_completion_and_preserves_scores(
+    settings, task, prediction, compact
+):
+    settings.compact_protocol = compact
+    task.include_task_profile = True
+    profile = {
+        "kind": "code_implement",
+        "difficulty": "routine",
+        "requirements": [],
+        "reusable": True,
+    }
+    if compact:
+        _, _, mapping = encode(task)
+        prediction = {
+            key: [3, "medium", list(ids), ["TASK_MATCH"]] for key, (_, ids) in mapping.items()
+        }
+    runtime = FakeRuntime(json.dumps({**prediction, "task_profile": profile}))
+    result = await Classifier(settings, runtime).classify(task)
+    assert result.source == "gemma"
+    assert result.metadata["task_profile"] == profile
+    assert len(runtime.calls) == 1
+    assert "task_profile" in runtime.calls[0][0]["content"]
+    assert len(result.prediction.candidates) == len(task.eligible_candidates)
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [
+        None,
+        {"kind": "invented"},
+        {
+            "kind": "unknown",
+            "difficulty": "unknown",
+            "requirements": [],
+            "reusable": True,
+        },
+    ],
+)
+async def test_invalid_task_profile_cannot_be_learned(settings, task, prediction, profile):
+    task.include_task_profile = True
+    raw = json.dumps({**prediction, "task_profile": profile})
+    result = await Classifier(settings, FakeRuntime(raw, raw)).classify(task)
+    assert result.source == "gemma"
+    assert result.metadata["task_profile_error"] == "TASK_PROFILE_INVALID"
+    assert "task_profile" not in result.metadata
 
 
 async def test_success_preserves_candidate_evidence_and_metadata(settings, task, prediction):

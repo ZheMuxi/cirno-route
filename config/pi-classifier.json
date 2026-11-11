@@ -6,6 +6,14 @@
   "pricing_file": "model-prices.json",
   "price_preference": "balanced",
   "price_preference_file": "../.runtime/router-preferences.json",
+  "habits": {
+    "enabled": true,
+    "threshold": 5,
+    "min_similarity": 0.985,
+    "min_margin": 0.04,
+    "file": "../.runtime/task-habits.json",
+    "cache": "../.runtime/semantic/e5-small-q8"
+  },
   "research_names": {
     "cirno-local/cirno-gemma-e4b": "HauhauCS/Gemma-4-E4B-Uncensored-HauhauCS-Aggressive:Q4_K_M"
   },

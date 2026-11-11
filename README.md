@@ -2,7 +2,7 @@
 
 CirnoRoute 使用本地 Gemma 4 E4B 分析任务与候选模型资料，再结合用户明确选择的价格偏好，为 Pi 选择回答模型。也可以单独使用 CLI、Python 接口或本地 HTTP API，只获取分类结果。
 
-当前版本为 **v0.3.0**，采用 **V2.1 评分标准**，默认使用插件内置的 `node-llama-cpp` 原生后端；继续使用 0–4 分制与 Gemma 4 E4B。变更与验证范围见 [版本说明](releases/v0.3.0.md)和[提示词评测](docs/prompt-evaluation.md)。项目仍处于实验阶段，能力等级不是成功率，价格比较也不等于实际账单。本阶段不包含用户习惯学习、用户画像、微调或消费预算管理。
+当前版本为 **v0.4.0**，新增 [本地语义匹配与习惯路由](docs/task-habits.md)，支持按成功使用次数复用同类任务的模型。继续使用 Gemma 4 E4B、0–4 分制、V2.1 评分标准和默认内置的 `node-llama-cpp` 后端。功能变更、使用方式与限制见 [版本说明](releases/v0.4.0.md)。项目仍处于实验阶段，能力等级不是成功率，价格比较也不等于实际账单；没有用户画像、微调或消费预算管理。
 
 ## 主要功能
 
@@ -12,6 +12,7 @@ CirnoRoute 使用本地 Gemma 4 E4B 分析任务与候选模型资料，再结�
 - **Pi 自动路由**：开启后根据能力与价格选模回答；普通对话隐藏评分，显示实际回答模型。
 - **独立分类**：`/classify` 只显示评分与推荐，不切换模型，也不执行任务。
 - **后台管理**：Pi 扩展按需准备模型与 llama.cpp，并管理自己启动的后台进程。
+- **习惯路由**：手动选择及 Gemma 路由成功使用累计到默认 5 次后，允许 E5 匹配同类任务直接复用模型；命中不再强化，可随时关闭。
 
 ## 环境要求
 
@@ -128,6 +129,9 @@ PYKEYS
 | `/bakaprice status` | 查看当前价格偏好 |
 | `/bakarouter` | 开启普通输入的自动选模与回答 |
 | `/bakarouter off` | 关闭自动路由，保留当前模型 |
+| `/bakahabits status` | 查看习惯学习、默认 5 次门槛及记录数量 |
+| `/bakahabits off` / `on` | 关闭或开启习惯学习与语义匹配 |
+| `/bakahabits threshold 5` / `clear` | 调整门槛或清空习惯记录 |
 
 自动路由每次启动默认关闭，价格偏好跨重启保留。每轮用户输入只选一次模型，工具续传沿用该模型。关闭自动路由后可用 Pi 的 `/model` 手动更换模型。修改扩展后重启 Pi 或 `/reload`，然后按需再次开启路由。
 
@@ -135,6 +139,7 @@ PYKEYS
 
 ```bash
 ./scripts/install-native-runtime.sh
+./scripts/install-semantic-runtime.sh
 ./scripts/start-pi.sh
 ```
 
@@ -173,7 +178,7 @@ API 的所有路径均需要 `Authorization: Bearer <token>`，分类 API 令牌
 
 - `task.text` 是当前任务，`requirements` 是本轮明确要求。
 - `eligible_candidates` 提供候选标识、能力及证据；候选 ID 和证据引用会经过校验。
-- `relevant_preferences` 默认空；不读取或更新用户习惯。
+- `relevant_preferences` 默认空；用户习惯由 Pi 扩展在本地独立管理，不注入候选能力评分或联网研究。
 - 输出包含候选质量等级、证据引用、不确定性类别及弃权状态。质量等级 0–4 不是任务成功概率。
 - 独立请求最多 8 个候选；Pi 目录按批次处理，实际 token 预算不足时继续拆分，不静默删候选或截断资料。
 - 价格按固定工作量比较，并区分官方价、网关参考价、未知及过期价格；不估算整轮实际账单。
@@ -207,7 +212,9 @@ node --test packages/pi-extension/*.test.mjs
 - [模型价格与三档偏好](docs/model-pricing.md)
 - [Pi 自动路由与失败处理](docs/automatic-routing.md)
 - [本地模型自动准备及生命周期](docs/pi-managed-runtime.md)
-- [v0.3.0 版本说明](releases/v0.3.0.md)
+- [本地语义匹配与习惯路由](docs/task-habits.md)
+- [v0.4.0 版本说明](releases/v0.4.0.md)
+- [v0.3.0 历史版本说明](releases/v0.3.0.md)
 - [v0.2.0 历史版本说明](releases/v0.2.0.md)
 - [变更记录](CHANGELOG.md)
 - [版本管理与回退](docs/versioning.md)

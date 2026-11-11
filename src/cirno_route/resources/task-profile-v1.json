@@ -1,0 +1,24 @@
+{
+  "version": "task-profile-v1",
+  "kinds": {
+    "code_implement": "实现程序或函数",
+    "code_debug": "修复程序错误",
+    "code_explain": "解释现有代码",
+    "code_design": "软件架构与系统设计",
+    "code_test": "编写测试",
+    "write_create": "原创文案或文章",
+    "write_edit": "改写或润色",
+    "summarize": "概括已有材料",
+    "translate": "语言翻译",
+    "extract": "从材料提取字段",
+    "math_calculate": "计算数值",
+    "math_prove": "数学证明",
+    "qa": "知识解释或一般问答",
+    "plan": "制定计划",
+    "research": "检索并综合资料",
+    "mixed": "多个并重目标",
+    "unknown": "无法可靠判断"
+  },
+  "difficulties": ["routine", "complex", "unknown"],
+  "requirements": ["tools", "web", "vision", "long_context", "structured_output"]
+}

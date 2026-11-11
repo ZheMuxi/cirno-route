@@ -4,6 +4,108 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import extension, { registerClassifier } from './index.ts';
+import { HabitStore, manualTaskProfile } from './habits.mjs';
+
+function habitHarness(t) {
+  const dir = mkdtempSync(join(tmpdir(), 'cirno-habit-extension-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const store = new HabitStore({ file: join(dir, 'habits.json'), enabled: true, threshold: 5, min_similarity: 0.985, min_margin: 0.04 });
+  const commands = new Map(), events = new Map();
+  const h = { commands, events, store, calls: 0, embeds: 0, rules: 0, entries: [], notices: [], closes: 0 };
+  const model = { provider: 'p', id: 'best' };
+  const ctx = { mode: 'tui', model, modelRegistry: { getAvailable: () => [model] },
+    ui: { notify: message => h.notices.push(message), setStatus() {} } };
+  h.ctx = ctx;
+  const semantic = { async embed() { h.embeds++; return { vector: [1, ...Array(383).fill(0)] }; },
+    async close() { h.closes++; }, async prepare() {} };
+  h.semantic = semantic;
+  registerClassifier({ registerEntryRenderer() {},
+    registerCommand: (name, command) => commands.set(name, command),
+    on: (name, handler) => events.set(name, handler),
+    appendEntry: (type, data) => h.entries.push({ type, data }),
+    async setModel(m) { ctx.model = m; await events.get('model_select')({ model: m, source: 'set' }, ctx); return true; },
+  }, { price_preference_file: join(dir, 'price.json') }, { close: async () => {} }, async (_cfg, _task, opts) => {
+    h.calls++; h.lastOptions = opts;
+    return { status: 'ok', source: 'gemma', candidates: [
+      { candidate_id: 'one', provider: 'p', model: 'best', quality_level: 4, evidence_ids: ['ev'] },
+    ], task_profile: { kind: 'code_implement', difficulty: 'routine', requirements: [], reusable: true } };
+  }, { store, semantic, manualProfile: text => { h.rules++; return manualTaskProfile(text); } });
+  h.start = (text = '写一个 Python 函数检查回文') => events.get('before_agent_start')({ messageType: 'user', prompt: text }, ctx);
+  h.finish = (extra = {}) => events.get('agent_end')({ messages: [{ role: 'assistant', provider: 'p', model: ctx.model.id,
+    content: [{ type: 'text', text: 'done' }], stopReason: 'stop', ...extra }] }, ctx);
+  h.command = (name, args = '') => commands.get(name).handler(args, ctx);
+  t.after(() => events.get('session_shutdown')());
+  return h;
+}
+
+test('five successful Gemma routes enable semantic bypass; hits and /classify never reinforce', async t => {
+  const h = habitHarness(t); await h.command('bakarouter');
+  for (let i = 0; i < 5; i++) {
+    await h.start(); assert.equal(h.lastOptions.includeTaskProfile, true); await h.finish();
+  }
+  assert.equal(h.calls, 5); assert.equal(h.rules, 0);
+  assert.equal(h.store.read().groups[0].counts[0].count, 5);
+  await h.start(); await h.finish(); await h.finish();
+  assert.equal(h.calls, 5); assert.equal(h.store.read().groups[0].counts[0].count, 5);
+  assert(h.notices.some(s => s.includes('习惯命中'))); assert.equal(h.entries.length, 0);
+  await h.command('classify', '写一个函数');
+  assert.equal(h.calls, 6); assert.equal(h.lastOptions.includeTaskProfile, false);
+  assert.equal(h.entries.at(-1).type, 'cirno-classification');
+  await h.command('bakahabits', 'off');
+  await h.start(); await h.finish();
+  assert.equal(h.calls, 7); assert.equal(h.lastOptions.includeTaskProfile, false);
+  assert.equal(h.store.read().groups[0].counts[0].count, 5);
+});
+
+test('only explicit manual choice runs rules; manual selection overrides next automatic route and counts success', async t => {
+  const h = habitHarness(t);
+  await h.start(); await h.finish(); assert.equal(h.rules, 0); assert.equal(h.store.read().groups.length, 0);
+  await h.command('bakarouter');
+  await h.events.get('model_select')({ model: h.ctx.model, source: 'set' }, h.ctx);
+  await h.start(); await h.finish();
+  assert.equal(h.calls, 0); assert.equal(h.rules, 1); assert.equal(h.store.read().groups[0].counts[0].count, 1);
+  await h.start(); await h.finish(); assert.equal(h.calls, 1); assert.equal(h.rules, 1);
+  await h.events.get('model_select')({ model: h.ctx.model, source: 'restore' }, h.ctx);
+  await h.start(); await h.finish(); assert.equal(h.calls, 2); assert.equal(h.rules, 1);
+});
+
+test('failed, truncated, cancelled and changed-model replies do not teach habits', async t => {
+  const h = habitHarness(t); await h.command('bakarouter');
+  for (const extra of [{ stopReason: 'error' }, { stopReason: 'aborted' }, { stopReason: 'length' }, { model: 'other' }, { content: [] }]) {
+    await h.start(); await h.finish(extra);
+  }
+  assert.equal(h.store.read().groups.length, 0); assert.equal(h.embeds, 0);
+  await h.start(); await h.command('bakaprice', 'cheap'); await h.finish();
+  assert.equal(h.store.read().groups.length, 0);
+  await h.start(); await h.events.get('session_shutdown')(); await h.finish();
+  assert.equal(h.store.read().groups.length, 0);
+});
+
+test('semantic errors fall back to Gemma, changed price scope misses, and unavailable habit winners fall back', async t => {
+  const h = habitHarness(t); await h.command('bakarouter');
+  for (let i = 0; i < 5; i++) { await h.start(); await h.finish(); }
+  h.semantic.embed = async () => { throw Error('private error'); };
+  await h.start(); assert.equal(h.calls, 6); // Failure never blocks the answer or leaks details.
+  assert(h.notices.every(n => !n.includes('private error')));
+  h.semantic.embed = async () => ({ vector: [1, ...Array(383).fill(0)] });
+  h.store.lookup = () => ({ provider: 'p', model: 'removed', count: 5, threshold: 5 });
+  await h.start(); assert.equal(h.calls, 7);
+  await h.command('bakaprice', 'premium');
+  await h.start(); assert.equal(h.calls, 8);
+  await h.command('bakahabits', 'clear'); assert.equal(h.store.read().groups.length, 0);
+});
+
+test('CIRNO_HABITS=0 restores ordinary Gemma routing without learning or loading E5', async t => {
+  const previous = process.env.CIRNO_HABITS;
+  process.env.CIRNO_HABITS = '0';
+  t.after(() => { if (previous === undefined) delete process.env.CIRNO_HABITS; else process.env.CIRNO_HABITS = previous; });
+  const h = habitHarness(t); await h.command('bakarouter');
+  await h.events.get('model_select')({ model: h.ctx.model, source: 'set' }, h.ctx);
+  await h.start(); await h.finish();
+  assert.equal(h.calls, 1); assert.equal(h.lastOptions.includeTaskProfile, false);
+  assert.equal(h.embeds, 0); assert.equal(h.rules, 0); assert.equal(h.store.read().groups.length, 0);
+  await h.command('bakahabits', 'on'); assert(h.notices.at(-1).includes('CIRNO_HABITS=0'));
+});
 
 test('manual classification and unsupported images never switch models; default routing is off', async () => {
   const commands = new Map(), events = new Map(), entries = [];

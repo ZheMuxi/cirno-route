@@ -5,11 +5,8 @@ export class RoutingError extends Error {
 export const sameModel = (a, b) => !!a && !!b && a.provider === b.provider && a.id === b.id;
 
 // Called only for an enabled ordinary user turn, never by /classify.
-export async function switchRecommendedModel(result, {
-  getModels, getModel, setModel, isAvailable, isActive, signal, abort, state,
-}) {
-  const active = () => !signal?.aborted && isActive();
-  if (!active()) return { status: 'skipped' };
+export async function switchRecommendedModel(result, options) {
+  if (options.signal?.aborted || !options.isActive()) return { status: 'skipped' };
   const route = result.routing;
   const row = result.candidates.find(c => c.candidate_id === route?.recommended_candidate_id);
   if (!row || result.source !== 'gemma' || result.status === 'blocked'
@@ -18,14 +15,30 @@ export async function switchRecommendedModel(result, {
       || row.provider !== route.provider || row.model !== route.model) {
     throw new RoutingError('ROUTER_NO_SUITABLE_MODEL');
   }
-  const model = getModels().find(m => m.provider === row.provider && m.id === row.model);
+  return switchTargetModel({ provider: row.provider, model: row.model,
+    price_preference: route.price_preference, reason: route.reason }, options);
+}
+
+export async function switchHabitModel(hit, pricePreference, options) {
+  if (!Number.isInteger(hit?.count) || !Number.isInteger(hit?.threshold) || hit.threshold < 1 || hit.count < hit.threshold) {
+    throw new RoutingError('HABIT_NOT_READY');
+  }
+  return switchTargetModel({ provider:hit.provider, model:hit.model,
+    price_preference:pricePreference, reason:'habit', source:'habit' }, options);
+}
+
+async function switchTargetModel(target, {
+  getModels, getModel, setModel, isAvailable, isActive, signal, abort, state,
+}) {
+  const active = () => !signal?.aborted && isActive();
+  if (!active()) return { status: 'skipped' };
+  const model = getModels().find(m => m.provider === target.provider && m.id === target.model);
   if (!model) throw new RoutingError('ROUTER_MODEL_UNAVAILABLE');
   try {
     if (!await isAvailable(model)) throw new RoutingError('ROUTER_MODEL_UNAVAILABLE');
   } catch { throw new RoutingError('ROUTER_MODEL_UNAVAILABLE'); }
   if (!active()) return { status: 'skipped' };
-  const outcome = { provider: model.provider, model: model.id,
-    price_preference: route.price_preference, reason: route.reason };
+  const outcome = { ...target, provider: model.provider, model: model.id };
   if (sameModel(getModel(), model)) return { ...outcome, status: 'unchanged' };
   // Model selection can await authentication. If cancellation/settings changes arrive meanwhile,
   // undo only our own selection; never replace a newer manual selection with the old model.
