@@ -66,6 +66,7 @@ class Task(Contract):
 
 class ClassifyRequest(Contract):
     schema_version: Literal["1"] = "1"
+    include_task_profile: bool = False
     task: Task
     eligible_candidates: Annotated[list[Candidate], Field(max_length=8)]
     relevant_preferences: Annotated[list[Preference], Field(max_length=12)] = Field(

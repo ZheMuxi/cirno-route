@@ -108,6 +108,7 @@ export function candidateBatches(text, candidates, batchSize = 3, maxBytes = 950
 
 export async function classifyCatalog(cfg, text, {
   signal, images = false, getModels, research, localClassify, onProgress = () => {},
+  includeTaskProfile = false,
 } = {}) {
   if (images) fail('TEXT_ONLY_CLASSIFIER');
   if (typeof text !== 'string' || !text.trim()) fail('EMPTY_TASK');
@@ -127,7 +128,9 @@ export async function classifyCatalog(cfg, text, {
     onProgress(`Gemma 分类 ${index + 1}/${batches.length} 批…`);
     let result;
     try {
-      result = await localClassify(taskBody(text, cards), signal);
+      const body = taskBody(text, cards);
+      if (includeTaskProfile && results.length === 0) body.include_task_profile = true;
+      result = await localClassify(body, signal);
     } catch (error) {
       if (error?.code !== 'CONTEXT_TOO_LARGE' || cards.length === 1) throw error;
       result = { status: 'blocked', reason_codes: ['CONTEXT_TOO_LARGE'] };
@@ -169,6 +172,7 @@ export async function classifyCatalog(cfg, text, {
     classifier_model: results[0]?.classifier_model ?? null,
     runtime_version: results[0]?.runtime_version ?? null,
     local_backend: results[0]?.local_backend ?? null,
+    task_profile: results[0]?.task_profile ?? null,
     model_digest: results[0]?.model_digest ?? null,
     usage: results.flatMap(r => r.usage), batch_count: batches.length,
     context_splits: contextSplits, wire_format: results[0]?.wire_format ?? null,

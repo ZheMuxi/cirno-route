@@ -8,7 +8,7 @@ v0.2.0 新增联网能力研究与完整 Pi 目录分批分类。使用 `/bakamo
 
 验证日期：2026-10-14。Pi 固定为 `@earendil-works/pi-coding-agent@1.2.0`。
 
-初始接入实现 `packages/pi-extension/index.ts` 适配层与 `core.mjs` HTTP/合同校验。保留原来的 Python RouterPredictor 和 llama.cpp 运行时。当前增加显式价格偏好及可选自动路由，不学习用户习惯、不做云评分。
+初始接入实现 `packages/pi-extension/index.ts` 适配层与 `core.mjs` HTTP/合同校验。保留原来的 Python RouterPredictor 和 llama.cpp 运行时。当前支持显式价格偏好及可选自动路由，v0.4.0 增加 [本地习惯学习](task-habits.md)；不做云评分。
 
 ## 启动
 

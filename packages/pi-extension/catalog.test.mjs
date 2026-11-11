@@ -26,6 +26,25 @@ function prediction(body) {
   };
 }
 
+test('optional task profile is requested once across batches, including first-batch context splits', async () => {
+  const calls = [];
+  const profile = { kind: 'code_implement', difficulty: 'routine', requirements: [], reusable: true };
+  const result = await classifyCatalog({ batch_size: 3 }, '写一个函数', {
+    includeTaskProfile: true, getModels: () => models, research: async body => researched(body.models),
+    localClassify: async body => {
+      calls.push(body);
+      if (calls.length === 1) return { status: 'blocked', reason_codes: ['CONTEXT_TOO_LARGE'] };
+      const r = prediction(body);
+      if (body.include_task_profile) r.metadata.task_profile = profile;
+      return r;
+    },
+  });
+  assert(calls[0].include_task_profile && calls[1].include_task_profile);
+  assert(calls.slice(2).every(c => !c.include_task_profile));
+  assert.deepEqual(result.task_profile, profile);
+  assert.equal(result.candidates.length, models.length);
+});
+
 test('catalog projection contains only identities and stable IDs across permutations', () => {
   const first = modelCatalog(models);
   assert.deepEqual(first, modelCatalog([...models].reverse()));

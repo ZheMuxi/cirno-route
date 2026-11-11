@@ -19,7 +19,9 @@ from .contracts import (
 )
 from .errors import ClassifierError
 from .runtime import LlamaRuntime, sha256
-from .validation import validate_prediction
+from .task_profile import INSTRUCTION as PROFILE_INSTRUCTION
+from .task_profile import TaskProfile, profile_schema
+from .validation import strict_json, validate_prediction
 
 PROMPT_VERSION = "router-system-v2.1"
 PROMPT = files("cirno_route").joinpath(f"resources/{PROMPT_VERSION}.txt").read_text()
@@ -87,6 +89,12 @@ class Classifier:
             payload, output_schema, mapping = encode(model_request)
             model_schema = output_schema
             system = self.system_prompt + "\n\n" + INSTRUCTION
+        if request.include_task_profile:
+            output_schema["properties"]["task_profile"] = profile_schema()
+            output_schema["required"].append("task_profile")
+            system += "\n" + PROFILE_INSTRUCTION
+            if mapping is None:
+                system += "\n本次完整输出约束：" + json.dumps(output_schema)
         metadata = {
             "request_id": str(uuid4()),
             "router_prompt_version": self.prompt_version,
@@ -113,6 +121,9 @@ class Classifier:
             "max_output_tokens": self.settings.max_output_tokens,
             "attempts": attempts,
             "verified_runtime": None,
+            "task_profile_prompt_sha256": sha256(PROFILE_INSTRUCTION)
+            if request.include_task_profile
+            else None,
         }
 
         def finish(prediction, source, reasons, blocked=False):
@@ -186,12 +197,28 @@ class Classifier:
                     try:
                         raw, usage = await self.runtime.complete(messages, output_schema)
                         record["usage"] = usage
+                        profile = None
+                        if request.include_task_profile:
+                            try:
+                                value = strict_json(raw)
+                                profile_value = value.pop("task_profile", None)
+                                raw = json.dumps(value)
+                            except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                                raise ClassifierError("ROUTER_INVALID_OUTPUT") from exc
+                            # Optional learning must never discard otherwise valid model scores.
+                            try:
+                                profile = TaskProfile.model_validate(profile_value)
+                            except ValidationError:
+                                metadata["task_profile_error"] = "TASK_PROFILE_INVALID"
                         prediction = (
                             decode(raw, request, mapping)
                             if mapping is not None
                             else validate_prediction(raw, request)
                         )
                         await self.runtime.verify(lock)
+                        if profile is not None:
+                            metadata["task_profile"] = profile.model_dump()
+                            metadata.pop("task_profile_error", None)
                         reasons = ["ROUTER_ABSTAIN"] if prediction.status == "abstain" else []
                         return finish(prediction, "gemma", reasons)
                     except ClassifierError as exc:

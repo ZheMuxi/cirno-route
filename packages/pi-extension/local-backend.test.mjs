@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { LocalBackend } from './local-backend.mjs';
 import { nativeSchema } from './native-runtime/schema.mjs';
+import { SemanticBackend, semanticWorkerEnv } from './semantic-backend.mjs';
+import { CompactPrefixIndex, createCompactTokenizer } from './semantic-runtime/compact-tokenizer.mjs';
 
 function fixture(t, { stall = false } = {}) {
   const project = mkdtempSync(join(tmpdir(), 'cirno-backend-'));
@@ -15,7 +17,7 @@ function fixture(t, { stall = false } = {}) {
     lines.on('line', line => {
       const r=JSON.parse(line);
       process.stdout.write(JSON.stringify({type:'progress', id:r.id, stage:'starting-model'})+'\\n');
-      if (!${stall}) process.stdout.write(JSON.stringify({type:'result', id:r.id, result:{pid:process.pid, method:r.method, body:r.body}})+'\\n');
+      if (!${stall}) process.stdout.write(JSON.stringify({type:'result', id:r.id, result:{pid:process.pid, method:r.method, body:r.body, scoped:process.env.CIRNO_WORKER_TEST}})+'\\n');
     });
     lines.on('close', () => process.exit(0));
   `);
@@ -105,4 +107,78 @@ test('native grammar retains score bounds, tuple length and allowed evidence', (
   assert.equal(schema.properties.c0.prefixItems[0].anyOf[0].maximum, 4);
   assert.throws(() => nativeSchema({ type: 'object', properties: { optional: { type: 'string' } } }), /NATIVE_SCHEMA_UNSUPPORTED/);
   assert.throws(() => nativeSchema({ $ref: '#/unknown' }), /NATIVE_SCHEMA_UNSUPPORTED/);
+});
+
+test('worker environment overrides reach only the owned child', async t => {
+  const saved = process.env.CIRNO_WORKER_TEST;
+  const backend = fixture(t);
+  backend.env = { CIRNO_WORKER_TEST: 'scoped-value' };
+  assert.equal((await backend.classify({})).scoped, 'scoped-value');
+  assert.equal(process.env.CIRNO_WORKER_TEST, saved);
+});
+
+test('semantic allocator settings are macOS-only and respect explicit overrides', () => {
+  assert.deepEqual(semanticWorkerEnv({}, 'darwin'), { MallocSpaceEfficient: '1' });
+  assert.deepEqual(semanticWorkerEnv({ MallocSpaceEfficient: '0' }, 'darwin'), { MallocSpaceEfficient: '0' });
+  assert.deepEqual(semanticWorkerEnv({}, 'linux'), {});
+  assert.deepEqual(semanticWorkerEnv({}, 'win32'), {});
+  const semantic = new SemanticBackend('/example');
+  assert(semantic.args.includes('--expose-gc'));
+  assert.equal(new LocalBackend('/example').env, undefined);
+});
+
+test('compact prefix search preserves all overlapping multilingual tokens and character offsets', () => {
+  const vocabulary = ['a', 'ab', 'abc', 'abd', '中', '中文', '日', '😀', '😀中', '😀中文', '▁', '▁a', 'é'];
+  const index = new CompactPrefixIndex(vocabulary);
+  for (const text of ['abcd', 'abz', '中文。', '😀中文a', '▁ab', 'éa', 'unknown']) {
+    const chars = [...text];
+    for (let begin = 0; begin < chars.length; begin++) {
+      const suffix = chars.slice(begin).join('');
+      const expected = vocabulary.filter(word => suffix.startsWith(word)).sort((a, b) => a.length - b.length);
+      assert.deepEqual([...index.common_prefix_search(chars, begin)], expected);
+    }
+  }
+  assert.deepEqual([...index.common_prefix_search([], 0)], []);
+  assert.deepEqual(vocabulary.slice(0, 3), ['a', 'ab', 'abc']);
+});
+
+test('compact tokenizer rejects incompatible model and normalizer contracts', () => {
+  for (const config of [{}, { model: { type: 'BPE' } }, { model: { type: 'Unigram', unk_id: 3 } },
+    { model: { type: 'Unigram', unk_id: 3 }, normalizer: { type: 'NFKC' } }]) {
+    assert.throws(() => createCompactTokenizer(config), /SEMANTIC_TOKENIZER_INVALID/);
+  }
+});
+
+test('compact Unigram retains token IDs, special tokens and full over-limit input', () => {
+  // Tiny identity charsmap: the synthetic vocabulary exercises the same pinned library integration.
+  const identityMap = Buffer.alloc(9);
+  identityMap.writeUInt32LE(4);
+  const specials = ['<s>', '</s>'];
+  const config = {
+    decoder: null,
+    model: { type: 'Unigram', unk_id: 3, vocab: [
+      ['<s>', 0], ['<pad>', 0], ['</s>', 0], ['<unk>', 0], ['▁', -5],
+      ['a', -5], ['ab', -1], ['b', -5], ['中', -1], ['😀', -1],
+    ] },
+    normalizer: { type: 'Sequence', normalizers: [
+      { type: 'Precompiled', precompiled_charsmap: identityMap.toString('base64') },
+      { type: 'Replace', pattern: { Regex: ' {2,}' }, content: ' ' },
+    ] },
+    pre_tokenizer: { type: 'Metaspace', replacement: '▁', add_prefix_space: true },
+    added_tokens: specials.map((content, index) => ({ id: index * 2, content,
+      single_word: false, lstrip: false, rstrip: false, normalized: false, special: true })),
+    post_processor: { type: 'TemplateProcessing', pair: [], single: [
+      { SpecialToken: { id: '<s>', type_id: 0 } }, { Sequence: { id: 'A', type_id: 0 } },
+      { SpecialToken: { id: '</s>', type_id: 0 } },
+    ], special_tokens: Object.fromEntries(specials.map((id, index) => [id, { id, ids: [index * 2], tokens: [id] }])) },
+  };
+  const encode = createCompactTokenizer(config);
+  const result = encode('ab  中文😀');
+  assert.deepEqual(result.ids, [0, 4, 6, 4, 8, 3, 9, 2]);
+  assert.deepEqual(result.mask, Array(8).fill(1));
+  assert.deepEqual(result.types, Array(8).fill(0));
+  assert.deepEqual(encode('ab</s>中').ids, [0, 4, 6, 2, 4, 8, 2]);
+  assert.deepEqual(encode('\ud800'), encode('\ufffd'));
+  assert.equal(encode('a'.repeat(520)).ids.length, 523);
+  assert.equal(config.model.vocab.length, 10);
 });
