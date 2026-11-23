@@ -10,7 +10,7 @@ export async function switchRecommendedModel(result, options) {
   const route = result.routing;
   const row = result.candidates.find(c => c.candidate_id === route?.recommended_candidate_id);
   if (!row || result.source !== 'gemma' || result.status === 'blocked'
-      || result.input_status === 'missing' || !Number.isInteger(row.quality_level)
+      || ['missing', 'unclear'].includes(result.input_status) || !Number.isInteger(row.quality_level)
       || row.quality_level < 3 || row.quality_level > 4 || !row.evidence_ids?.length
       || row.provider !== route.provider || row.model !== route.model) {
     throw new RoutingError('ROUTER_NO_SUITABLE_MODEL');

@@ -1,0 +1,10 @@
+pricing_context 是独立的 API 费用参考数据，不属于 capabilities 或 evidence。
+currency=USD，unit=per_million_tokens：输入、输出、缓存读取单价均按每百万 token 计。
+known 表示有效单价；unknown/stale 的金额都是 null，分别表示未知/过期，不能当成 0。
+basis=official_api 是官方 API 参考价，user 是用户配置价，local 是本机运行、API 单价为 0。
+紧凑输入以 columns 指定固定列顺序；rows 的 id 对应同一批的 candidate_id 短编号，
+不是 evidence_id；input、output、cache_read 分别是输入、输出和缓存读取单价。
+价格高低、零价、缺价或过期都不能改变 quality_level、uncertainty、preference_fit_level，
+也不能改变 input_status 或 task_profile；不能用价格作为能力支持、限制或证据引用。
+继续仅按候选自己的能力证据给原有 0–4 分或 null，不因价格缺失而弃权、不因免费而加分。
+无需计算或输出费用、价格排名、推荐模型或其他新字段；最终价格偏好由程序单独处理。

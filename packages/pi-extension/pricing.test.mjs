@@ -151,9 +151,9 @@ test('price display separates quality, reference cost, sources and unknowns', ()
   const display = formatResult(ranked);
   assert.match(display, /价格偏好：接受昂贵 · 推荐：p\/a/);
   assert.match(display, /输入 1 \/ 输出 2/);
-  assert.match(display, /官方参考价/);
+  assert.match(display, /官方 API 参考价（非实际账单）/);
   assert.match(display, /价格未知/);
   assert.match(display, /不是本次账单/);
-  assert.match(display, /1 已配置 · 1 未知/);
+  assert.match(display, /1 可比.*1 未知/);
   assert.equal(ranked.routing.price_book_sha256.length, 64);
 });

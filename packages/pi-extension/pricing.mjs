@@ -25,8 +25,24 @@ export function validatePrices(data) {
       || Object.keys(data.models).length > 256) fail('PRICING_CONFIG_INVALID');
   for (const [id, p] of Object.entries(data.models)) {
     if (!text(id) || !id.includes('/') || !plain(p)) fail('PRICING_CONFIG_INVALID');
-    if (p.input_per_million === null && p.output_per_million === null) continue;
-    if (!rate(p.input_per_million) || !rate(p.output_per_million)
+    if (p.expires_at !== undefined && (typeof p.expires_at !== 'number' || !Number.isFinite(p.expires_at)
+      || p.expires_at < 0 || p.expires_at > 253402300799)) fail('PRICING_CONFIG_INVALID');
+    if (p.billing_mode !== undefined && !['token', 'subscription'].includes(p.billing_mode)) fail('PRICING_CONFIG_INVALID');
+    if (p.pricing_basis !== undefined && p.pricing_basis !== 'official_api') fail('PRICING_CONFIG_INVALID');
+    const referenceIdentity = [p.reference_provider, p.reference_model];
+    if (referenceIdentity.some(v => v !== undefined)
+      && (!referenceIdentity.every(text) || p.pricing_basis !== 'official_api')) fail('PRICING_CONFIG_INVALID');
+    if (p.pricing_basis === 'official_api'
+      && (!referenceIdentity.every(text) || !['official', 'reference'].includes(p.source)
+        || p.billing_mode === 'subscription')) fail('PRICING_CONFIG_INVALID');
+    const subscription = p.billing_mode === 'subscription';
+    const reference = [p.reference_input_per_million, p.reference_output_per_million];
+    if (reference.some(v => v != null) && (!subscription || !reference.every(rate))) fail('PRICING_CONFIG_INVALID');
+    if (p.reference_cache_read_per_million != null && (!subscription || !reference.every(rate)
+      || !rate(p.reference_cache_read_per_million))) fail('PRICING_CONFIG_INVALID');
+    if (p.input_per_million === null && p.output_per_million === null && !subscription) continue;
+    if ((subscription ? p.input_per_million !== null || p.output_per_million !== null
+        || p.cache_read_per_million != null : !rate(p.input_per_million) || !rate(p.output_per_million))
         || (p.cache_read_per_million != null && !rate(p.cache_read_per_million))
         || !['official', 'reference', 'user', 'local'].includes(p.source)
         || !date(p.checked_at) || !date(p.valid_until) || p.valid_until < p.checked_at
@@ -55,9 +71,15 @@ export function readPrices(file) {
 export function resolvePrice(book, provider, model, now = new Date()) {
   const key = `${provider}/${model}`;
   const p = Object.hasOwn(book.models, key) ? book.models[key] : null;
+  // Legacy allowance rates may include subscription discounts or monthly limits.
+  // Read those files for migration, but never reinterpret their rates as API prices.
+  if (p?.billing_mode === 'subscription') return {
+    status: 'unknown', currency: 'USD', comparison_cost: null, requires_api_refresh: true,
+    note: '官方 API 价格待更新；原套餐资料已停用，未转换为 API 单价。',
+  };
   if (!p || p.input_per_million === null) return { status: 'unknown', currency: 'USD' };
   const day = now.toISOString().slice(0, 10);
-  if (day > p.valid_until || day < p.checked_at) {
+  if (day > p.valid_until || day < p.checked_at || (p.expires_at !== undefined && now.getTime() / 1000 >= p.expires_at)) {
     return { ...p, status: 'stale', currency: 'USD', comparison_cost: null };
   }
   // A common workload is comparable; it is not a prediction of this conversation's bill.
@@ -125,7 +147,7 @@ export function recommend(result, book, mode = 'balanced', now = new Date()) {
     ...row, pricing: resolvePrice(book, row.provider, row.model, now),
   }));
   // Unknown/unsupported/partial capabilities never become suitable merely by being cheap.
-  const eligible = result.status === 'blocked' || result.input_status === 'missing'
+  const eligible = result.status === 'blocked' || ['missing', 'unclear'].includes(result.input_status)
     || result.source !== 'gemma' ? []
     : candidates.filter(r => Number.isInteger(r.quality_level) && r.quality_level >= 3
       && r.quality_level <= 4 && r.evidence_ids?.length);
@@ -159,7 +181,8 @@ export function recommend(result, book, mode = 'balanced', now = new Date()) {
       reason, minimum_quality: 3,
       comparison: { currency: 'USD', input_tokens: 1000, output_tokens: 1000, cache_hit_ratio: 0 },
       known_prices: candidates.filter(r => r.pricing.status === 'known').length,
-      unknown_prices: candidates.filter(r => r.pricing.status !== 'known').length,
+      unknown_prices: candidates.filter(r => ['unknown', 'stale'].includes(r.pricing.status)).length,
+      subscription_prices: 0, // Compatibility with earlier renderers; subscription pricing is retired.
       price_book_sha256: createHash('sha256').update(JSON.stringify(book)).digest('hex'),
       evaluated_at: now.toISOString(),
     },
@@ -167,11 +190,14 @@ export function recommend(result, book, mode = 'balanced', now = new Date()) {
 }
 
 export function formatPrice(price) {
-  if (!price || price.status === 'unknown') return '价格未知';
+  if (!price || price.status === 'unknown') return price?.requires_api_refresh ? '官方 API 价格待更新' : '价格未知';
   if (price.status === 'stale') return '价格已过期，未参与比较';
-  const kind = { official: '官方标准价', reference: '官方参考价', user: '用户配置价', local: '本地 API 成本' }[price.source];
+  if (price.status === 'subscription') return '官方 API 价格待更新';
+  const kind = { official: '官方 API 标准价', reference: '官方 API 参考价（非实际账单）', user: '用户配置价', local: '本地 API 费用（不含电力和硬件）' }[price.source];
+  const reference = price.source === 'reference' && price.reference_provider && price.reference_model
+    ? ` · 基准 ${price.reference_provider}/${price.reference_model}` : '';
   return `USD/百万 token 输入 ${price.input_per_million} / 输出 ${price.output_per_million}`
-    + ` · 1k+1k 约 $${price.comparison_cost.toFixed(6)} · ${kind}`;
+    + ` · 1k+1k 约 $${price.comparison_cost.toFixed(6)} · ${kind}${reference}`;
 }
 
 export function formatRecommendation(routing) {

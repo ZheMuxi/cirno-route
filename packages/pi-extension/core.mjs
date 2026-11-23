@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { priceMode, formatPrice, formatRecommendation } from './pricing.mjs';
+import { normalizePricingContext } from './pricing-context.mjs';
 
 export class ClassifierError extends Error {
   constructor(code) { super(code); this.code = code; }
@@ -20,7 +21,8 @@ export function loopback(value) {
 
 export function readConfig(file) {
   const cfg = JSON.parse(readFileSync(file, 'utf8'));
-  if (cfg.schema_version !== '1' || !Array.isArray(cfg.candidates) || !cfg.candidates.length || cfg.candidates.length > 8) fail('INVALID_CONFIG');
+  if (cfg.schema_version !== '1' || !Array.isArray(cfg.candidates) || cfg.candidates.length > 8
+    || (!cfg.candidates.length && cfg.candidate_source !== 'pi')) fail('INVALID_CONFIG');
   if (cfg.candidate_source !== undefined && !['configured', 'pi'].includes(cfg.candidate_source)) fail('INVALID_CONFIG');
   if (cfg.batch_size !== undefined && (!Number.isInteger(cfg.batch_size) || cfg.batch_size < 1 || cfg.batch_size > 8)) fail('INVALID_CONFIG');
   if (cfg.batch_max_bytes !== undefined && (!Number.isInteger(cfg.batch_max_bytes) ||
@@ -31,19 +33,44 @@ export function readConfig(file) {
     if (!h || typeof h.enabled !== 'boolean' || !Number.isInteger(h.threshold) || h.threshold < 1 || h.threshold > 1000
       || typeof h.min_similarity !== 'number' || h.min_similarity < 0.9 || h.min_similarity > 1
       || typeof h.min_margin !== 'number' || h.min_margin < 0.01 || h.min_margin > 0.2
+      || (h.verify_uncertain !== undefined && typeof h.verify_uncertain !== 'boolean')
       || typeof h.file !== 'string' || !h.file || typeof h.cache !== 'string' || !h.cache) fail('INVALID_CONFIG');
     h.file = resolve(dirname(file), h.file); h.cache = resolve(dirname(file), h.cache);
   }
-  for (const key of ['pricing_file', 'price_preference_file']) {
+  for (const key of ['pricing_file', 'researched_pricing_file', 'price_preference_file', 'privacy_file']) {
     if (cfg[key] !== undefined) {
       if (typeof cfg[key] !== 'string' || !cfg[key].trim()) fail('INVALID_CONFIG');
       cfg[key] = resolve(dirname(file), cfg[key]);
     }
   }
+  if (cfg.candidate_source === 'pi' && cfg.researched_pricing_file === undefined) {
+    cfg.researched_pricing_file = resolve(dirname(file), '../.runtime/model-prices.researched.json');
+  }
+  if (cfg.local_price_models !== undefined) {
+    if (!Array.isArray(cfg.local_price_models) || cfg.local_price_models.length > 128) fail('INVALID_CONFIG');
+    const bindings = new Set();
+    for (const model of cfg.local_price_models) {
+      if (!model || [model.provider, model.model, model.base_url].some(value =>
+        typeof value !== 'string' || !value || value.length > 200 || /[\x00-\x1f\x7f]/.test(value))) fail('INVALID_CONFIG');
+      let url;
+      try { url = new URL(model.base_url); } catch { fail('INVALID_CONFIG'); }
+      if (!['http:', 'https:'].includes(url.protocol) || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+        || url.username || url.password || url.search || url.hash) fail('INVALID_CONFIG');
+      const key = `${model.provider}/${model.model}`;
+      if (bindings.has(key)) fail('INVALID_CONFIG');
+      bindings.add(key);
+    }
+  }
   if (cfg.research_names !== undefined && (!cfg.research_names || Array.isArray(cfg.research_names)
     || typeof cfg.research_names !== 'object' || Object.values(cfg.research_names).some(
       name => typeof name !== 'string' || !name || name.length > 200 || /[\x00-\x1f\x7f]/.test(name)))) fail('INVALID_CONFIG');
-  loopback(cfg.classifier_url); loopback(cfg.gateway_url);
+  loopback(cfg.classifier_url);
+  // A Pi registry without cirno-gateway needs neither legacy candidate cards nor gateway credentials.
+  if (cfg.candidate_source !== 'pi' || cfg.gateway_url !== undefined || cfg.gateway_token_file !== undefined) {
+    loopback(cfg.gateway_url);
+    if (typeof cfg.gateway_token_file !== 'string' || !cfg.gateway_token_file.trim()) fail('INVALID_CONFIG');
+    cfg.gateway_token_file = resolve(dirname(file), cfg.gateway_token_file);
+  }
   const ids = new Set(), evidence = new Set();
   for (const c of cfg.candidates) {
     if (!idPattern.test(c.candidate_id) || ids.has(c.candidate_id) || typeof c.model !== 'string' || !c.model || typeof c.revision !== 'string') fail('INVALID_CONFIG');
@@ -55,7 +82,6 @@ export function readConfig(file) {
     }
   }
   cfg.classifier_token_file = resolve(dirname(file), cfg.classifier_token_file);
-  cfg.gateway_token_file = resolve(dirname(file), cfg.gateway_token_file);
   return cfg;
 }
 
@@ -146,7 +172,7 @@ export function summarize(result) {
     evidence_check_prompt_sha256: result.metadata?.evidence_check_prompt_sha256 ?? null,
     limit_check_prompt_sha256: result.metadata?.limit_check_prompt_sha256 ?? null,
     pipeline_version: ['v2', 'v3'].includes(result.metadata?.pipeline_version) ? result.metadata.pipeline_version : null,
-    input_status: ['ready', 'missing'].includes(result.metadata?.input_status) ? result.metadata.input_status : null,
+    input_status: ['ready', 'missing', 'unclear'].includes(result.metadata?.input_status) ? result.metadata.input_status : null,
     candidate_evidence_status: Object.fromEntries(rows.flatMap(c => {
       const state = result.metadata?.candidate_evidence_status?.[c.candidate_id];
       return ['supported', 'unsupported', 'insufficient'].includes(state) ? [[c.candidate_id, state]] : [];
@@ -156,10 +182,15 @@ export function summarize(result) {
     model_digest: result.metadata?.verified_runtime?.model_digest ?? null,
     local_backend: result.metadata?.local_backend ?? null,
     task_profile: result.metadata?.task_profile ?? null,
+    task_profile_prompt_sha256: result.metadata?.task_profile_prompt_sha256 ?? null,
+    generation_schema_sha256: result.metadata?.generation_schema_sha256 ?? null,
+    pricing_context_sha256: result.metadata?.pricing_context_sha256 ?? null,
+    pricing_context_prompt_sha256: result.metadata?.pricing_context_prompt_sha256 ?? null,
   };
 }
 
-export async function classify(cfg, text, { signal, images = false, localClassify, includeTaskProfile = false } = {}) {
+export async function classify(cfg, text, { signal, images = false, localClassify, includeTaskProfile = false,
+  getPricingContext } = {}) {
   if (images) fail('TEXT_ONLY_CLASSIFIER');
   if (typeof text !== 'string' || !text.trim()) fail('EMPTY_TASK');
   // Reject oversized inputs intact; do not silently drop the end of a task.
@@ -170,6 +201,11 @@ export async function classify(cfg, text, { signal, images = false, localClassif
   const candidates = cfg.candidates.filter(c => available.has(c.model));
   if (!candidates.length) fail('NO_ELIGIBLE_MODEL');
   const body = { schema_version: '1', task: { text }, eligible_candidates: candidates, relevant_preferences: [] };
+  if (getPricingContext) {
+    const priceCatalog = candidates.map(c => ({ candidate_id: c.candidate_id,
+      provider: c.provider ?? 'cirno-gateway', model: c.model }));
+    body.pricing_context = normalizePricingContext(await getPricingContext(priceCatalog), candidates);
+  }
   if (includeTaskProfile) body.include_task_profile = true;
   if (Buffer.byteLength(JSON.stringify(body)) > 10000) fail('CONTEXT_TOO_LARGE');
   const result = localClassify
@@ -189,11 +225,12 @@ export function formatResult(result) {
   const lines = [`本地分类：${result.status} · ${result.source} · ${result.latency_ms ?? '?'} ms`];
   if (result.local_backend?.mode === 'node-llama-cpp') lines.push('分类后端：node-llama-cpp（插件内置原生库）');
   if (result.input_status === 'missing') lines.push('资料检查：缺少完成任务所必需的输入。');
+  if (result.input_status === 'unclear') lines.push('资料检查：任务目标或所指材料不明确，需要补充说明。');
   else if (Object.values(result.candidate_evidence_status ?? {}).includes('insufficient')) lines.push('资料检查：部分候选的能力证据不足，保留其他有依据的评分。');
   if (result.research) lines.push(`联网能力资料：${result.research.documented}/${result.research.total} 有依据 · ${result.research.cache_hits} 命中缓存 · ${result.batch_count} 批分类`);
   if (result.routing) {
     lines.push(formatRecommendation(result.routing));
-    lines.push(`价格：${result.routing.known_prices} 已配置 · ${result.routing.unknown_prices} 未知/过期；按 1k 输入 + 1k 输出比较，不是本次账单。`);
+    lines.push(`价格：${result.routing.known_prices} 可比 · ${result.routing.unknown_prices} 未知/过期；按官方 API 参考价及本地零价比较 1k 输入 + 1k 输出，不是本次账单。`);
   }
   for (const row of result.candidates) {
     lines.push(`${row.provider && row.model ? `${row.provider}/${row.model}` : row.candidate_id}: ${row.quality_level ?? '弃权'}/4 · 不确定性 ${row.uncertainty}`);

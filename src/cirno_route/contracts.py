@@ -64,6 +64,46 @@ class Task(Contract):
         return self
 
 
+PriceRate = Annotated[float, Field(strict=True, ge=0, le=100000, allow_inf_nan=False)]
+
+
+class CandidatePrice(Contract):
+    """Compact numeric price data, never candidate capability evidence."""
+
+    candidate_id: Identifier
+    status: Literal["known", "unknown", "stale"]
+    basis: Literal["official_api", "user", "local", "unknown"]
+    input_per_million: PriceRate | None
+    output_per_million: PriceRate | None
+    cache_read_per_million: PriceRate | None
+
+    @model_validator(mode="after")
+    def consistent(self):
+        rates = (self.input_per_million, self.output_per_million, self.cache_read_per_million)
+        if self.status == "known":
+            if self.basis == "unknown" or any(value is None for value in rates[:2]):
+                raise ValueError("known prices require a basis and both input/output rates")
+            if self.basis == "local" and rates != (0, 0, 0):
+                raise ValueError("local API rates must all be zero")
+        elif self.basis != "unknown" or any(value is not None for value in rates):
+            raise ValueError("unknown/stale prices require unknown basis and null rates")
+        return self
+
+
+class PricingContext(Contract):
+    currency: Literal["USD"]
+    unit: Literal["per_million_tokens"]
+    prices: Annotated[list[CandidatePrice], Field(max_length=8)]
+
+    @model_validator(mode="after")
+    def unique_and_stable(self):
+        ids = [price.candidate_id for price in self.prices]
+        if len(ids) != len(set(ids)):
+            raise ValueError("price candidate_id must be unique")
+        self.prices = sorted(self.prices, key=lambda price: price.candidate_id)
+        return self
+
+
 class ClassifyRequest(Contract):
     schema_version: Literal["1"] = "1"
     include_task_profile: bool = False
@@ -72,6 +112,7 @@ class ClassifyRequest(Contract):
     relevant_preferences: Annotated[list[Preference], Field(max_length=12)] = Field(
         default_factory=list
     )
+    pricing_context: PricingContext | None = None
 
     @model_validator(mode="after")
     def unique_ids(self):
@@ -81,7 +122,18 @@ class ClassifyRequest(Contract):
         evidence = [e.evidence_id for c in self.eligible_candidates for e in c.evidence]
         if len(evidence) != len(set(evidence)):
             raise ValueError("evidence_id must be globally unique in one request")
+        if self.pricing_context is not None and {
+            price.candidate_id for price in self.pricing_context.prices
+        } != set(ids):
+            raise ValueError("price candidate_ids must exactly match eligible candidates")
         return self
+
+    def model_input_json(self):
+        # Keep pre-price requests byte-for-byte unchanged, including their existing
+        # null/default fields. Do not globally exclude_none or exclude_defaults.
+        return self.model_dump_json(
+            exclude={"pricing_context"} if self.pricing_context is None else None
+        )
 
 
 class CandidatePrediction(Contract):

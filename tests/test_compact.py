@@ -8,6 +8,7 @@ from cirno_route.compact import INSTRUCTION, decode, encode
 from cirno_route.contracts import Evidence, Preference
 from cirno_route.errors import ClassifierError
 from cirno_route.research import EVIDENCE_PREAMBLE
+from cirno_route.task_profile import INPUT_INSTRUCTION
 
 
 def response(mapping):
@@ -114,19 +115,22 @@ async def test_compact_classifier_uses_fresh_messages_and_restores_order(setting
     settings.compact_protocol = True
     task.eligible_candidates.reverse()
     payload, _, mapping = encode(task)
-    runtime = FakeRuntime(json.dumps(response(mapping)), json.dumps(response(mapping)))
+    raw = json.dumps({"input_status": "ready", **response(mapping)})
+    runtime = FakeRuntime(raw, raw)
     classifier = Classifier(settings, runtime)
     for _ in range(2):
         result = await classifier.classify(task)
         assert result.source == "gemma"
-        assert result.metadata["wire_format"] == "compact-v1"
+        assert result.metadata["wire_format"] == "compact-v2"
         assert result.metadata["model_input_bytes"] == len(payload.encode())
         assert [c.candidate_id for c in result.prediction.candidates] == [
             c.candidate_id for c in task.eligible_candidates
         ]
     assert runtime.calls[0] == runtime.calls[1]
     assert len(runtime.calls[0]) == 2
-    assert runtime.calls[0][0]["content"] == PROMPT + "\n\n" + INSTRUCTION
+    assert (
+        runtime.calls[0][0]["content"] == PROMPT + "\n\n" + INSTRUCTION + "\n\n" + INPUT_INSTRUCTION
+    )
     assert runtime.calls[0][1]["content"] == payload
     assert runtime.verifies == 4
 
@@ -134,7 +138,10 @@ async def test_compact_classifier_uses_fresh_messages_and_restores_order(setting
 async def test_compact_invalid_json_uses_bounded_repair_without_replaying_output(settings, task):
     settings.compact_protocol = True
     _, _, mapping = encode(task)
-    runtime = FakeRuntime('{"c0":{},"c0":"untrusted-repair-text"}', json.dumps(response(mapping)))
+    runtime = FakeRuntime(
+        '{"c0":{},"c0":"untrusted-repair-text"}',
+        json.dumps({"input_status": "ready", **response(mapping)}),
+    )
     result = await Classifier(settings, runtime).classify(task)
     assert result.source == "gemma"
     assert len(result.metadata["attempts"]) == 2

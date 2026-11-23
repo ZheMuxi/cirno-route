@@ -19,12 +19,15 @@ from .contracts import (
 )
 from .errors import ClassifierError
 from .runtime import LlamaRuntime, sha256
+from .task_profile import INPUT_INSTRUCTION, INPUT_STATUSES, TaskLabels, profile_schema
 from .task_profile import INSTRUCTION as PROFILE_INSTRUCTION
-from .task_profile import TaskProfile, profile_schema
 from .validation import strict_json, validate_prediction
 
 PROMPT_VERSION = "router-system-v2.1"
 PROMPT = files("cirno_route").joinpath(f"resources/{PROMPT_VERSION}.txt").read_text()
+PRICING_INSTRUCTION = (
+    files("cirno_route").joinpath("resources/router-pricing-context-v1.txt").read_text()
+)
 OUTPUT_SCHEMA = RouterPrediction.model_json_schema()
 
 
@@ -81,32 +84,60 @@ class Classifier:
         attempts = []
         model_request = request
         output_schema = constrained_schema(model_request)
-        model_schema = OUTPUT_SCHEMA
-        payload = model_request.model_dump_json()
-        system = self.system_prompt + "\nJSON Schema:\n" + json.dumps(model_schema)
+        original_payload = model_request.model_input_json()
+        payload = original_payload
         mapping = None
+        system = self.system_prompt
         if self.settings.compact_protocol:
             payload, output_schema, mapping = encode(model_request)
-            model_schema = output_schema
-            system = self.system_prompt + "\n\n" + INSTRUCTION
+            system += "\n\n" + INSTRUCTION
+        prefix_properties = {"input_status": {"type": "string", "enum": list(INPUT_STATUSES)}}
+        suffix_properties = {}
         if request.include_task_profile:
-            output_schema["properties"]["task_profile"] = profile_schema()
-            output_schema["required"].append("task_profile")
+            suffix_properties["task_profile"] = profile_schema()
+        output_schema["properties"] = {
+            **prefix_properties,
+            **output_schema["properties"],
+            **suffix_properties,
+        }
+        output_schema["required"] = [
+            *prefix_properties,
+            *output_schema["required"],
+            *suffix_properties,
+        ]
+        if mapping is None:
+            # Keep candidate-specific identifiers in grammar constraints and user data only.
+            public_schema = copy.deepcopy(OUTPUT_SCHEMA)
+            public_schema["properties"] = {
+                **prefix_properties,
+                **public_schema["properties"],
+                **suffix_properties,
+            }
+            public_schema["required"] = [
+                *prefix_properties,
+                *public_schema["required"],
+                *suffix_properties,
+            ]
+            system += "\nJSON Schema:\n" + json.dumps(public_schema)
+        if request.pricing_context is not None:
+            system += "\n\n" + PRICING_INSTRUCTION
+        if request.include_task_profile:
             system += "\n" + PROFILE_INSTRUCTION
-            if mapping is None:
-                system += "\n本次完整输出约束：" + json.dumps(output_schema)
+        # Keep the task-input gate last so optional learning instructions cannot
+        # distract from missing material before the first generated decision.
+        system += "\n\n" + INPUT_INSTRUCTION
         metadata = {
             "request_id": str(uuid4()),
             "router_prompt_version": self.prompt_version,
             "router_prompt_sha256": sha256(self.system_prompt),
             "output_schema_sha256": sha256(json.dumps(OUTPUT_SCHEMA, sort_keys=True)),
             "pipeline_version": self.pipeline_version,
-            "generation_schema_sha256": sha256(json.dumps(model_schema, sort_keys=True)),
+            "generation_schema_sha256": sha256(json.dumps(output_schema, sort_keys=True)),
             "model_input_sha256": sha256(payload),
-            "wire_format": "compact-v1" if mapping is not None else "full-v1",
+            "wire_format": "compact-v2" if mapping is not None else "full-v2",
             "wire_prompt_sha256": sha256(INSTRUCTION) if mapping is not None else None,
             "model_input_bytes": len(payload.encode()),
-            "original_input_bytes": len(model_request.model_dump_json().encode()),
+            "original_input_bytes": len(original_payload.encode()),
             "output_constraint_sha256": sha256(json.dumps(output_schema, sort_keys=True)),
             "candidate_cards_sha256": sha256(
                 json.dumps(
@@ -121,10 +152,16 @@ class Classifier:
             "max_output_tokens": self.settings.max_output_tokens,
             "attempts": attempts,
             "verified_runtime": None,
+            "input_check_prompt_sha256": sha256(INPUT_INSTRUCTION),
             "task_profile_prompt_sha256": sha256(PROFILE_INSTRUCTION)
             if request.include_task_profile
             else None,
         }
+        if request.pricing_context is not None:
+            metadata["pricing_context_sha256"] = sha256(
+                json.dumps(request.pricing_context.model_dump(), sort_keys=True, ensure_ascii=False)
+            )
+            metadata["pricing_context_prompt_sha256"] = sha256(PRICING_INSTRUCTION)
 
         def finish(prediction, source, reasons, blocked=False):
             by_id = {row.candidate_id: row for row in prediction.candidates}
@@ -143,7 +180,7 @@ class Classifier:
                 metadata=metadata,
             )
 
-        def abstain(reason, blocked=False):
+        def abstain(reason, blocked=False, *, source="rules"):
             prediction = RouterPrediction(
                 schema_version="1",
                 status="abstain",
@@ -159,11 +196,11 @@ class Classifier:
                     for c in request.eligible_candidates
                 ],
             )
-            return finish(prediction, "rules", [reason], blocked)
+            return finish(prediction, source, [reason], blocked)
 
         if not request.eligible_candidates:
             return abstain("NO_ELIGIBLE_MODEL", blocked=True)
-        if len(model_request.model_dump_json().encode()) > self.settings.max_input_bytes:
+        if len(original_payload.encode()) > self.settings.max_input_bytes:
             return abstain("CONTEXT_TOO_LARGE", blocked=True)
         if rules_only:
             return abstain("RULES_ONLY")
@@ -198,27 +235,40 @@ class Classifier:
                         raw, usage = await self.runtime.complete(messages, output_schema)
                         record["usage"] = usage
                         profile = None
+                        try:
+                            value = strict_json(raw)
+                            input_status = value.pop("input_status", None)
+                            if input_status not in INPUT_STATUSES:
+                                raise ValueError("invalid input status")
+                        except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                            raise ClassifierError("ROUTER_INVALID_OUTPUT") from exc
                         if request.include_task_profile:
-                            try:
-                                value = strict_json(raw)
-                                profile_value = value.pop("task_profile", None)
-                                raw = json.dumps(value)
-                            except (ValueError, KeyError, TypeError, AttributeError) as exc:
-                                raise ClassifierError("ROUTER_INVALID_OUTPUT") from exc
+                            profile_value = value.pop("task_profile", None)
                             # Optional learning must never discard otherwise valid model scores.
                             try:
-                                profile = TaskProfile.model_validate(profile_value)
+                                profile = TaskLabels.from_wire(profile_value).public_profile(
+                                    input_status
+                                )
                             except ValidationError:
                                 metadata["task_profile_error"] = "TASK_PROFILE_INVALID"
+                        raw = json.dumps(value)
                         prediction = (
                             decode(raw, request, mapping)
                             if mapping is not None
                             else validate_prediction(raw, request)
                         )
                         await self.runtime.verify(lock)
+                        metadata["input_status"] = input_status
                         if profile is not None:
                             metadata["task_profile"] = profile.model_dump()
                             metadata.pop("task_profile_error", None)
+                        if input_status != "ready":
+                            return abstain(
+                                "TASK_INPUT_MISSING"
+                                if input_status == "missing"
+                                else "TASK_INPUT_UNCLEAR",
+                                source="gemma",
+                            )
                         reasons = ["ROUTER_ABSTAIN"] if prediction.status == "abstain" else []
                         return finish(prediction, "gemma", reasons)
                     except ClassifierError as exc:
