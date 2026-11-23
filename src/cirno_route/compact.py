@@ -69,6 +69,31 @@ def encode(request: ClassifyRequest):
             "minItems": len(fields),
             "maxItems": len(fields),
         }
+    if request.pricing_context is not None:
+        prices = {price.candidate_id: price for price in request.pricing_context.prices}
+        payload["pricing_context"] = {
+            "currency": request.pricing_context.currency,
+            "unit": request.pricing_context.unit,
+            "columns": [
+                "id",
+                "status",
+                "basis",
+                "input",
+                "output",
+                "cache_read",
+            ],
+            "rows": [
+                [
+                    short_id,
+                    prices[full_id].status,
+                    prices[full_id].basis,
+                    prices[full_id].input_per_million,
+                    prices[full_id].output_per_million,
+                    prices[full_id].cache_read_per_million,
+                ]
+                for short_id, (full_id, _evidence_ids) in mapping.items()
+            ],
+        }
     schema = {
         "type": "object",
         "properties": properties,

@@ -2,17 +2,20 @@
 
 CirnoRoute 使用本地 Gemma 4 E4B 分析任务与候选模型资料，再结合用户明确选择的价格偏好，为 Pi 选择回答模型。也可以单独使用 CLI、Python 接口或本地 HTTP API，只获取分类结果。
 
-当前版本为 **v0.4.0**，新增 [本地语义匹配与习惯路由](docs/task-habits.md)，支持按成功使用次数复用同类任务的模型。继续使用 Gemma 4 E4B、0–4 分制、V2.1 评分标准和默认内置的 `node-llama-cpp` 后端。功能变更、使用方式与限制见 [版本说明](releases/v0.4.0.md)。项目仍处于实验阶段，能力等级不是成功率，价格比较也不等于实际账单；没有用户画像、微调或消费预算管理。
+当前版本为 **v0.5.0**。可以指定哪些文件只能交给本地或可信模型，并在查询模型能力时同步官方 API 参考价。分类器继续使用 Gemma 4 E4B、0–4 分制和 V2.1 评分标准，默认由插件内置的 `node-llama-cpp` 运行。功能与升级说明见 [v0.5.0 版本说明](releases/v0.5.0.md)。
 
 ## 主要功能
 
 - **本地分类**：保留任务、能力依据和全部候选，使用紧凑协议分批评分；资料不足的候选保留未知状态。
-- **能力资料查询**：分类前查询并缓存候选模型的公开能力资料；支持更换研究模型和手动刷新。
-- **价格偏好**：希望便宜、均衡、接受昂贵。价格在分类完成后由程序处理，不增加 Gemma 的推理上下文。
+- **能力与价格查询**：分类前查询并缓存候选模型的公开能力及价格资料；支持更换研究模型和手动刷新。有效价格在同轮推荐中使用，本地推理的 API 费用按 0 计算。
+- **价格偏好**：希望便宜、均衡、接受昂贵。Gemma 接收独立的紧凑价格表，能力仍按 0–4 分评估；程序结合能力分和价格偏好完成选模。
 - **Pi 自动路由**：开启后根据能力与价格选模回答；普通对话隐藏评分，显示实际回答模型。
 - **独立分类**：`/classify` 只显示评分与推荐，不切换模型，也不执行任务。
 - **后台管理**：Pi 扩展按需准备模型与 llama.cpp，并管理自己启动的后台进程。
 - **习惯路由**：手动选择及 Gemma 路由成功使用累计到默认 5 次后，允许 E5 匹配同类任务直接复用模型；命中不再强化，可随时关闭。
+- **文件保护**：指定文件或目录后，按本地规则限制可用模型；没有许可模型时拦截，价格与习惯不能解除限制。
+- **路由可靠性改进**：缺少任务材料时暂停自动回答，失败通道短暂冷却；已学习的多语言代表样本保留更久，相同输入可跳过 E5 编码。详见 [自动路由](docs/automatic-routing.md)和[习惯路由](docs/task-habits.md)。
+- **首次跨语言复用**：E5 找到近邻但未达直接匹配门槛时，可用现有 Gemma 简短核验类型、难度和全部要求；通过后跳过全候选评分，进程内缓存支持同一输入再次直接复用。工具与严格 JSON 要求改为逐项判断。
 
 ## 环境要求
 
@@ -51,36 +54,43 @@ uv sync --frozen --python 3.12
 .venv/bin/cirno-route init
 ```
 
-`install-pi.sh` 将 Pi 安装到 `../Pi`，并按锁文件安装插件内的原生推理依赖；已有配置和会话会保留。首次安装会复制不含密钥的模型配置模板。`init` 只生成本地服务令牌，不下载模型、不生成供应商 API 密钥。
+`install-pi.sh` 将 Pi 安装到 `../Pi`，并按锁文件安装插件内的原生推理依赖；已有配置和会话会保留。首次安装会复制不含密钥的模型配置模板，其中只提供本地 HTTP 模型入口，执行模型需自行配置。`init` 只生成本地服务令牌，不下载模型、不生成供应商 API 密钥。
 
 ## 配置自己的模型服务
 
-仓库不包含模型网关或供应商账户。默认配置是一个可调整的示例，不能直接假定其中的模型在你的服务中可用。
+仓库不包含供应商账户，也不要求额外部署模型网关。请将有权调用的执行模型及其认证配置到 Pi；分类器从 Pi 可用目录获取候选。
 
 | 配置文件 | 需要配置的内容 |
 | --- | --- |
 | `../Pi/.state/models.json` | Pi 执行模型的 provider、模型 ID、API 类型、服务地址及凭据引用；模板见 [models.example.json](tooling/pi/models.example.json) |
-| `config/pi-classifier.json` | 候选来源、网关地址、分批上限及价格配置路径 |
+| `config/pi-classifier.json` | 候选来源、分批上限、价格文件路径及本地零价模型绑定；默认 `candidate_source: "pi"`、`candidates: []` |
 | `config.json` | 本地分类设置、研究模型、搜索接口及凭据来源 |
-| `config/model-prices.json` | 按完整 `provider/model` 配置价格、来源和有效期 |
+| `config/model-prices.json` | 手动价格基础表；按完整 `provider/model` 配置价格、来源和有效期，自动查询不覆盖此文件 |
+| `.runtime/model-prices.researched.json` | 联网查询后自动保存的价格资料，不进入 Git |
 
-### 执行模型与网关
+### 执行模型
 
-默认 provider `cirno-gateway` 使用回环地址 `http://127.0.0.1:8045/v1`。这是配置示例，不是项目提供的服务；使用时需自行运行兼容网关，并将 Pi 的 `baseUrl` 与分类配置的 `gateway_url` 改为同一个实际地址。当前网关目录检查仅接受字面回环 HTTP 地址，支持 `127.0.0.1` 或 `[::1]`。
+在 Pi 中配置实际执行模型的 provider、模型 ID、API 类型、地址及凭据引用。默认分类配置不含网关地址、网关密钥或备用候选卡；`pi` 模式直接读取 Pi 的可用模型目录。
 
-将实际网关模型 ID 填入 Pi 配置。分类时，这个 provider 的候选会与网关 `/models` 返回的列表求交集。其他供应商可以作为独立 provider 配置到 Pi，相关认证由 Pi 管理。
+安装模板只保留 `cirno-local/cirno-gemma-e4b` 的本地 HTTP 入口。该入口需要对应的本地 HTTP 服务，内置 `node-llama-cpp` 分类后台不会为它提供对话接口。若使用云端模型回答，应先在 Pi 中配置相应供应商与认证。
 
-启动脚本默认选择 `cirno-gateway/claude-sonnet-4-6`。如果服务没有此模型，应使用你实际配置的模型启动，例如：
+启动脚本沿用 Pi 已保存的默认模型，不再强制指定网关模型。首次配置后可通过 Pi 的 `/model` 选择执行模型，也可在启动时明确指定：
 
 ```bash
 ./scripts/start-pi.sh --model your-provider/your-model
 ```
 
-按默认启动脚本接入时，需要将网关密钥保存在 `.runtime/gateway.token`。该文件的内容是单行密钥，启动时注入环境变量；不要把真实密钥直接写进受 Git 跟踪的 JSON 或脚本。
+认证使用 Pi 支持的环境变量或本地凭据引用，不要把真实密钥写进受 Git 跟踪的 JSON 或脚本。
+
+如需兼容旧 `cirno-gateway` 服务，可自行添加该 provider，并在分类配置中同时填写 `gateway_url` 和 `gateway_token_file`；该 provider 的候选会与网关 `/models` 求交集。地址需与 Pi 的 `baseUrl` 一致，目录查询仅支持字面回环 HTTP 地址（`127.0.0.1` 或 `[::1]`）。网关属于可选高级配置，启动脚本不会读取或注入其密钥，Pi 的执行认证需另行配置。
 
 ### 联网能力研究
 
 默认研究模型 ID 为 `deepseek-flash`。模型整理与搜索分别配置，可调整 `config.json` 中的 `capability_research`，详见 [能力资料查询](docs/capability-research.md)。
+
+能力查询同时查询价格，并分别检查证据；价格优先从已获取的官方表格按型号、表头和单位直接提取，不依赖研究模型改写后的引文。首次分类准备资料和 `/bakamodels refresh` 都会同步价格；`/bakamodels` 只读本地状态，不联网、不写文件。有效的 `source: "user"` 手动价格优先于查询结果；未查到或已过期的价格不当作免费。云模型统一按对应厂商的官方 API 参考价参与路由，OpenCode Go 也采用这一口径，不采用套餐额度或套餐折扣；明确登记的本地运行模型 API 费用为 0。参考价用于选模，不代表服务商实际账单。配置方式见 [模型价格](docs/model-pricing.md)。
+
+本地零价需要在 `config/pi-classifier.json` 的 `local_price_models` 中明确绑定模型和回环地址，并与 Pi 当前执行模型地址一致；已在文件保护中登记为本地的模型也可提供此绑定。仅使用本机代理地址不代表本地推理，价格登记也不授予受保护文件访问权限。这里的 0 只表示 API token 费用，不包含硬件和电费。
 
 默认配置从环境变量 `DEEPSEEK_API_KEY` 读取凭据，也可以从 `../Pi/.state/deepseek.token` 读取。更换研究模型时，应分别核对模型接口与搜索接口的凭据；执行模型的认证与研究模型的认证也需要各自配置。
 
@@ -92,7 +102,6 @@ import getpass
 from pathlib import Path
 
 for label, filename in [
-    ("Gateway API key: ", ".runtime/gateway.token"),
     ("DeepSeek research/search API key: ", "../Pi/.state/deepseek.token"),
 ]:
     key = getpass.getpass(label).strip()
@@ -106,7 +115,7 @@ for label, filename in [
 PYKEYS
 ```
 
-不使用联网研究时，可将 `candidate_source` 改为 `configured`，自行维护 `config/pi-classifier.json` 中的候选与证据，并关闭 `capability_research.enabled`。此模式只使用配置中的候选，不会研究完整 Pi 模型目录。
+不使用联网研究且需要旧的固定候选流程时，可关闭 `capability_research.enabled`，将 `candidate_source` 改为 `configured`。该兼容模式要求自行填写 1–8 张候选卡及其证据，并同时配置完整的 `gateway_url`、`gateway_token_file` 和对应 Pi 模型；不能只切换标志而保留空候选。此模式只使用配置中的候选，不会研究完整 Pi 模型目录。
 
 ## 启动与使用
 
@@ -121,19 +130,27 @@ PYKEYS
 | Pi 命令 | 行为 |
 | --- | --- |
 | `/classify 任务内容` | 只分类，查看全部候选的评分和推荐 |
-| `/bakamodels` | 查看能力资料与缓存状态 |
-| `/bakamodels refresh` | 主动重新联网查询模型能力 |
+| `/bakamodels` | 只读查看能力缓存与价格状态，不联网、不写文件 |
+| `/bakamodels refresh` | 主动重新联网查询模型能力与价格，更新本地资料 |
 | `/bakaprice 希望便宜` | 在能力达标的候选中优先低价 |
 | `/bakaprice 均衡` | 能力差距较小且节省明显时选择便宜模型 |
 | `/bakaprice 接受昂贵` | 优先能力，同分选择已知价格更高的模型 |
 | `/bakaprice status` | 查看当前价格偏好 |
 | `/bakarouter` | 开启普通输入的自动选模与回答 |
 | `/bakarouter off` | 关闭自动路由，保留当前模型 |
+| `/bakarouter status` | 查看自动路由状态和暂时冷却的模型 |
 | `/bakahabits status` | 查看习惯学习、默认 5 次门槛及记录数量 |
 | `/bakahabits off` / `on` | 关闭或开启习惯学习与语义匹配 |
 | `/bakahabits threshold 5` / `clear` | 调整门槛或清空习惯记录 |
+| `/bakaprivacy add <路径>` / `remove <路径>` | 添加或移除文件、目录保护规则 |
+| `/bakaprivacy local provider/model` / `trust provider/model` | 登记本地或可信执行模型，绑定当前端点 |
+| `/bakaprivacy revoke provider/model` / `status` | 撤销模型许可或查看保护状态 |
 
 自动路由每次启动默认关闭，价格偏好跨重启保留。每轮用户输入只选一次模型，工具续传沿用该模型。关闭自动路由后可用 Pi 的 `/model` 手动更换模型。修改扩展后重启 Pi 或 `/reload`，然后按需再次开启路由。
+
+升级到能力与价格联合查询后，建议重启 Pi，再执行 `/bakamodels refresh`。研究提示词变化会使旧缓存自然失效，首次可能需要重新查询较多型号；之后继续复用有效缓存。仅更新价格核对日期、来源或备注不会重置习惯；只有当前候选的有效价格、计费状态等影响选模的数据变化，才切换习惯适用范围。
+
+文件保护独立于自动路由开关。初始没有保护路径或可信执行模型；应先配置路径和许可模型，再读取敏感文件。本机地址可能是云模型代理，不会被自动视为本地推理，插件内置的 Gemma 分类器也不会自动成为回答模型。会话涉及受保护文件后，后续内容仍受相同限制；存在规则时，不可信模型的 shell、目录遍历及未知工具会被保守拦截。完整命令、会话范围和适配限制见 [文件保护说明](docs/file-privacy.md)。
 
 默认后端的原生依赖安装在插件目录内，直接加载同一份 Gemma GGUF，不启动 `llama-server` 或监听推理端口。已有安装升级时可单独补装：
 
@@ -183,12 +200,13 @@ API 的所有路径均需要 `Authorization: Bearer <token>`，分类 API 令牌
 - 独立请求最多 8 个候选；Pi 目录按批次处理，实际 token 预算不足时继续拆分，不静默删候选或截断资料。
 - 价格按固定工作量比较，并区分官方价、网关参考价、未知及过期价格；不估算整轮实际账单。
 
-V2.1 仍存在缺少必要任务资料却不弃权等已知限制，跨批次及不同运行时的评分尚未校准。联网资料也可能整理错误。首次联网准备、模型加载、分类和远端回答均会增加等待时间，不保证固定延迟。测试结果与限制见 [v0.3.0 版本说明](releases/v0.3.0.md)。
+本版在同一次分类生成中先检查任务材料；判为缺失或目标不明时，所有候选保留未知分并暂停自动回答。材料判断仍由 Gemma 完成，不能保证识别所有省略输入或语义错误；跨批次及不同运行时的评分也尚未校准。联网资料可能整理错误。首次联网准备、模型加载、分类和远端回答均会增加等待时间，不保证固定延迟。
 
 ## 数据与凭据
 
 - 用户任务在本地 Gemma 中分类；能力研究只发送模型标识，不发送任务正文或会话。
 - 开启实际路由后，Pi 会把执行任务及相应会话上下文发送给选中的回答模型。
+- 文件保护规则限制相关请求只能发送给允许的模型；规则和会话保护标记保存在本机 `.runtime/file-privacy.json`，不保存文件正文或密钥。
 - `.runtime/` 保存本地令牌、模型锁、下载缓存、研究资料和运行日志；Pi 私有配置与会话位于仓库外的 `../Pi/.state/`。
 - 密钥、权重、会话及运行日志不应提交。仓库通过 `.gitignore` 排除 `.runtime/`、`*.token`、`*.gguf` 等本机文件；受版本管理的配置仅使用凭据引用。
 
@@ -213,7 +231,9 @@ node --test packages/pi-extension/*.test.mjs
 - [Pi 自动路由与失败处理](docs/automatic-routing.md)
 - [本地模型自动准备及生命周期](docs/pi-managed-runtime.md)
 - [本地语义匹配与习惯路由](docs/task-habits.md)
-- [v0.4.0 版本说明](releases/v0.4.0.md)
+- [受保护文件与可信模型](docs/file-privacy.md)
+- [v0.5.0 版本说明](releases/v0.5.0.md)
+- [v0.4.0 历史版本说明](releases/v0.4.0.md)
 - [v0.3.0 历史版本说明](releases/v0.3.0.md)
 - [v0.2.0 历史版本说明](releases/v0.2.0.md)
 - [变更记录](CHANGELOG.md)

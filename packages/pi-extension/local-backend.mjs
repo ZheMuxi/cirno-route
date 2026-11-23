@@ -13,7 +13,7 @@ const stages = {
   'starting-model': '加载本地 Gemma…',
   'starting-native-model': '通过 node-llama-cpp 加载本地 Gemma…',
   'checking-model': '校验模型与模板…',
-  'researching-models': '查询并整理模型能力资料',
+  'researching-models': '查询并整理模型能力和价格资料',
   ready: 'Gemma 分类中…',
 };
 
@@ -84,6 +84,10 @@ export class LocalBackend {
 
   async classify(body, { signal, onProgress } = {}) {
     return this.request('classify', body, { signal, onProgress });
+  }
+
+  async profile(text, { signal, onProgress } = {}) {
+    return this.request('task_profile', { text }, { signal, onProgress });
   }
 
   async research(body, { signal, onProgress } = {}) {

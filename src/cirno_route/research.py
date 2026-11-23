@@ -18,9 +18,28 @@ from pydantic import Field, field_validator, model_validator
 
 from .contracts import Candidate, Contract, Evidence, Identifier
 from .errors import ClassifierError
+from .research_pricing import (
+    PriceFindings,
+    extract_price,
+    parse_price,
+    price_expiry,
+    price_identity,
+    price_names,
+    price_result,
+    price_search_query,
+    quote_expiry,
+    resolve_researched_price,
+    validate_price,
+)
 from .validation import strict_json
 
 PROMPT = files("cirno_route").joinpath("resources/capability-research-v1.txt").read_text()
+# Exact previous combined-prompt hash; only that known format is migrated.
+LEGACY_PROMPT_HASH = "975c8ed8f2562b8f208ee6f78a5489365bac1a5a5a650c016d392f717a291213"
+PRICE_PROMPT = (
+    "你只整理指定渠道准确型号的价格，不重新评估能力。仅输出符合 Schema 的价格 JSON 对象。\n"
+    + PROMPT.split("pricing 独立于能力等级：", 1)[1]
+)
 DIMENSIONS = (
     "coding",
     "reasoning",
@@ -168,6 +187,12 @@ class Findings(Contract):
     assessments: Annotated[list[Assessment], Field(min_length=9, max_length=9)]
     limitations: Annotated[list[Annotated[str, Field(max_length=100)]], Field(max_length=3)]
     identity_source_ids: Annotated[list[str], Field(max_length=5)]
+    pricing: PriceFindings = Field(default_factory=PriceFindings)
+
+    @field_validator("pricing", mode="before")
+    @classmethod
+    def independent_price(cls, value):
+        return parse_price(value)
 
     @model_validator(mode="after")
     def dimensions(self):
@@ -196,6 +221,11 @@ class Profile(Contract):
     findings: Findings
     sources: list[Source]
     usage: dict
+    price_error: str | None = None
+    pricing_retrieved_at: float | None = None
+    pricing_expires_at: float | None = None
+    pricing_retry_after: float | None = None
+    pricing_usage: dict = Field(default_factory=dict)
 
 
 class Failure(Contract):
@@ -302,7 +332,15 @@ def card_from_profile(identity, profile):
     if not any(a.level is not None for a in f.assessments):
         return card
     revision = digest(
-        {"findings": f.model_dump(), "sources": [s.model_dump() for s in profile.sources]}
+        {
+            "findings": f.model_dump(exclude={"pricing"}),
+            "sources": [
+                s.model_dump()
+                for s in profile.sources
+                if s.source_id
+                in set(f.identity_source_ids).union(*(a.source_ids for a in f.assessments))
+            ],
+        }
     )
     card.revision = "research-" + revision[:16]
     levels = "; ".join(
@@ -331,10 +369,25 @@ class CapabilityResearch:
         self.settings = settings
         self.transport = transport
         self.now = now
-        self.prompt_hash = digest(PROMPT)
+        # A pricing policy update must not throw away valid capability research.
+        self.prompt_hash = digest(PROMPT.split("pricing 独立于能力等级：", 1)[0])
         self.semaphore = asyncio.Semaphore(settings.concurrency)
 
-    def key(self, identity):
+    def research_identity(self, identity):
+        target = price_identity(identity)
+        return {
+            **identity.model_dump(),
+            "price_reference": None
+            if target is None
+            else {
+                "provider": target.provider,
+                "model": target.model,
+                "display_names": list(price_names(target)),
+                "region": "Singapore International" if target.provider == "alibaba" else None,
+            },
+        }
+
+    def key(self, identity, *, legacy=False):
         return digest(
             {
                 "identity": identity.model_dump(),
@@ -342,9 +395,11 @@ class CapabilityResearch:
                 "base_url": self.settings.base_url,
                 "search_base_url": self.settings.search_base_url,
                 "search_count": self.settings.search_count,
-                "prompt": self.prompt_hash,
+                "prompt": LEGACY_PROMPT_HASH if legacy else self.prompt_hash,
                 "schema": "1",
-                "search_policy": "publisher-first-v1",
+                "search_policy": "publisher-and-provider-pricing-v3"
+                if legacy
+                else "publisher-capability-v4",
                 "ttl_hours": self.settings.ttl_hours,
                 "unknown_ttl_hours": self.settings.unknown_ttl_hours,
             }
@@ -352,21 +407,35 @@ class CapabilityResearch:
 
     def load(self, identity):
         path = Path(self.settings.cache_dir) / (self.key(identity) + ".json")
+        legacy = not path.exists()
+        if legacy:
+            path = Path(self.settings.cache_dir) / (self.key(identity, legacy=True) + ".json")
         try:
             if path.stat().st_size > 200000:
                 return None
             profile = Profile.model_validate(strict_json(path.read_text()))
             if (
-                profile.cache_key != self.key(identity)
+                profile.cache_key != self.key(identity, legacy=legacy)
                 or profile.identity != identity
-                or profile.prompt_sha256 != self.prompt_hash
+                or profile.prompt_sha256 != (LEGACY_PROMPT_HASH if legacy else self.prompt_hash)
                 or profile.expires_at <= self.now()
                 or any(not valid_source_url(s.url) for s in profile.sources)
             ):
                 return None
             validate_findings(profile.findings, profile.sources)
+            price = validate_price(identity, profile.findings.pricing, profile.sources)
+            if price != profile.findings.pricing:
+                profile.findings.pricing = price
+                profile.pricing_retry_after = 0
             if unresolved_alias(identity, profile.findings, profile.sources):
                 return None
+            if legacy:
+                profile.cache_key = self.key(identity)
+                profile.prompt_sha256 = self.prompt_hash
+                if identity.provider == "opencode-go" and price.status == "unknown":
+                    # Old "unknown" meant no Go subscription evidence; it must
+                    # receive its first official-API lookup under the new policy.
+                    profile.pricing_retry_after = 0
             return profile
         except (OSError, ValueError):
             return None
@@ -449,42 +518,254 @@ class CapabilityResearch:
         except (ValueError, UnicodeError):
             raise ClassifierError("RESEARCH_INVALID_RESPONSE") from None
 
-    async def research_one(self, client, identity, key, search_key):
-        # No user prompt, local path, credentials or session data enters either request.
-        query = search_query(identity)
+    async def search(self, client, key, query, prefix):
         raw = await self.post(
             client,
             self.settings.search_base_url + "/search",
-            search_key,
-            {
-                "query": query,
-                "count": self.settings.search_count,
-                "need_content": True,
-            },
+            key,
+            {"query": query, "count": self.settings.search_count, "need_content": True},
         )
         results = raw.get("results")
         if not isinstance(results, list):
             raise ClassifierError("RESEARCH_INVALID_RESPONSE")
-        sources = []
+        found = []
         for item in results[: self.settings.search_count]:
             if not isinstance(item, dict) or not valid_source_url(item.get("url")):
                 continue
+            limit = 9000 if prefix in {"p", "retryprice"} else 6000
             excerpt = "\n".join(
-                value[:6000]
+                value[:limit]
                 for field in ("summary", "content")
                 if isinstance(value := item.get(field), str) and value
             )[:9000]
             if not excerpt.strip():
                 continue
-            sources.append(
+            found.append(
                 Source(
-                    source_id=f"s{len(sources) + 1}",
+                    source_id=f"{prefix}{len(found) + 1}",
                     url=item["url"][:8192],
                     title=str(item.get("title", ""))[:300],
                     excerpt=excerpt,
                     published_at=item.get("date") if isinstance(item.get("date"), str) else None,
                 )
             )
+        return found
+
+    def share_prices(self, profiles):
+        """Reuse only this run's valid, same-provider official source material."""
+        changed = set()
+        for profile in profiles:
+            if not profile or profile.expires_at <= self.now():
+                continue
+            if price_result(profile, self.now())["status"] != "unknown":
+                continue
+            pool, provenance = [], {}
+            for i, owner in enumerate(profiles):
+                if (
+                    not owner
+                    or owner.identity.provider != profile.identity.provider
+                    or owner.expires_at <= self.now()
+                ):
+                    continue
+                for j, source in enumerate(owner.sources):
+                    source_id = f"shared{i}_{j}"
+                    price_source = source.source_id in owner.findings.pricing.source_ids
+                    if (
+                        source.source_id.startswith(("keptprice", "sharedprice"))
+                        and not price_source
+                    ):
+                        # Old retained evidence cannot acquire the capability card's newer date.
+                        continue
+                    recent_price_source = price_source or source.source_id.startswith("retryprice")
+                    retrieved = (
+                        (owner.pricing_retrieved_at or owner.retrieved_at)
+                        if recent_price_source
+                        else owner.retrieved_at
+                    )
+                    expires = (
+                        min(owner.pricing_expires_at or owner.expires_at, owner.expires_at)
+                        if recent_price_source
+                        else owner.expires_at
+                    )
+                    if expires <= self.now():
+                        continue
+                    pool.append(source.model_copy(update={"source_id": source_id}))
+                    provenance[source_id] = (retrieved, expires)
+            pricing = extract_price(profile.identity, pool)
+            if pricing.status == "unknown" or quote_expiry(profile.identity, pricing) <= self.now():
+                continue
+            selected = next(s for s in pool if s.source_id == pricing.source_ids[0])
+            retrieved, expires = provenance[selected.source_id]
+            capability_ids = set(profile.findings.identity_source_ids).union(
+                *(a.source_ids for a in profile.findings.assessments)
+            )
+            profile.sources = [s for s in profile.sources if s.source_id in capability_ids]
+            selected = selected.model_copy(update={"source_id": "sharedprice1"})
+            profile.sources.append(selected)
+            profile.findings.pricing = pricing.model_copy(
+                update={"source_ids": [selected.source_id]}
+            )
+            profile.pricing_retrieved_at = retrieved
+            profile.pricing_expires_at = min(expires, profile.expires_at)
+            profile.pricing_retry_after = price_expiry(profile)
+            profile.price_error = None
+            try:
+                self.save(profile)
+                changed.add(profile.cache_key)
+            except OSError:
+                pass  # In-memory, independently verified prices can still be displayed.
+        return changed
+
+    def price_due(self, profile):
+        if not profile or not price_search_query(profile.identity):
+            return False
+        if profile.pricing_retry_after is not None:
+            return profile.pricing_retry_after <= self.now()
+        if profile.findings.pricing.status == "unknown":
+            return profile.retrieved_at + self.settings.unknown_ttl_hours * 3600 <= self.now()
+        return price_expiry(profile) <= self.now()
+
+    def price_deadline(self, profile):
+        if profile.price_error:
+            return self.now() + self.settings.failure_retry_seconds
+        if profile.findings.pricing.status == "unknown":
+            return self.now() + self.settings.unknown_ttl_hours * 3600
+        expires = price_expiry(profile)
+        return (
+            expires if expires > self.now() else self.now() + self.settings.unknown_ttl_hours * 3600
+        )
+
+    def preserve_price(self, profile, cached):
+        # Never renew old prices merely because fresh evidence is unavailable.
+        if (
+            profile.findings.pricing.status == "unknown"
+            and price_result(cached, self.now())["status"] != "unknown"
+        ):
+            old_price = cached.findings.pricing
+            previous = [s for s in cached.sources if s.source_id in old_price.source_ids]
+            occupied = {s.source_id for s in profile.sources}
+            prefix = "keptprice"
+            while any(f"{prefix}{i + 1}" in occupied for i in range(len(previous))):
+                prefix += "x"
+            kept = [
+                s.model_copy(update={"source_id": f"{prefix}{i + 1}"})
+                for i, s in enumerate(previous)
+            ]
+            profile.sources.extend(kept)
+            profile.findings.pricing = old_price.model_copy(
+                update={"source_ids": [s.source_id for s in kept]}
+            )
+            profile.pricing_retrieved_at = cached.pricing_retrieved_at or cached.retrieved_at
+            profile.pricing_expires_at = min(
+                cached.pricing_expires_at or cached.expires_at, profile.expires_at
+            )
+            if profile.pricing_retry_after is not None:
+                profile.pricing_retry_after = min(
+                    profile.pricing_retry_after, price_expiry(profile)
+                )
+
+    async def research_price(self, client, cached, key, search_key):
+        """Refresh only provider pricing while retaining the valid capability record."""
+        profile = cached.model_copy(deep=True)
+        profile.price_error = None
+        try:
+            sources = await self.search(
+                client, search_key, price_search_query(cached.identity), "retryprice"
+            )
+            pricing = PriceFindings()
+            if sources:
+                body = {
+                    "model": self.settings.model,
+                    "stream": False,
+                    "temperature": 0,
+                    "max_tokens": 1500,
+                    "response_format": {"type": "json_object"},
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": PRICE_PROMPT
+                            + "\nJSON Schema:\n"
+                            + json.dumps(PriceFindings.model_json_schema(), ensure_ascii=False),
+                        },
+                        {
+                            "role": "user",
+                            "content": json.dumps(
+                                {
+                                    "model": self.research_identity(cached.identity),
+                                    "sources": [s.model_dump() for s in sources],
+                                },
+                                ensure_ascii=False,
+                            ),
+                        },
+                    ],
+                }
+                if urlsplit(self.settings.base_url).hostname == "api.deepseek.com":
+                    body["thinking"] = {"type": "disabled"}
+                response = await self.post(
+                    client, self.settings.base_url + "/chat/completions", key, body
+                )
+                profile.pricing_usage = {
+                    k: v
+                    for k, v in response.get("usage", {}).items()
+                    if k in {"prompt_tokens", "completion_tokens", "total_tokens"}
+                    and isinstance(v, int)
+                    and not isinstance(v, bool)
+                    and v >= 0
+                }
+                try:
+                    choice = response["choices"][0]
+                    if choice.get("finish_reason") != "stop":
+                        raise ValueError("truncated price response")
+                    pricing = resolve_researched_price(
+                        cached.identity,
+                        parse_price(strict_json(choice["message"]["content"])),
+                        sources,
+                    )
+                except (KeyError, IndexError, TypeError, ValueError):
+                    raise ClassifierError("RESEARCH_INVALID_FINDINGS") from None
+            capability_ids = set(profile.findings.identity_source_ids).union(
+                *(a.source_ids for a in profile.findings.assessments)
+            )
+            profile.sources = [
+                s for s in profile.sources if s.source_id in capability_ids
+            ] + sources
+            profile.findings.pricing = pricing
+            profile.pricing_retrieved_at = self.now()
+            profile.pricing_expires_at = min(
+                self.now() + self.settings.ttl_hours * 3600, profile.expires_at
+            )
+            profile.pricing_retry_after = self.price_deadline(profile)
+            self.preserve_price(profile, cached)
+        except ClassifierError as exc:
+            profile.price_error = exc.code
+            profile.pricing_retry_after = self.price_deadline(profile)
+        self.save(profile)
+        return profile
+
+    async def research_one(self, client, identity, key, search_key, cached=None):
+        # No user prompt, local path, credentials or session data enters either request.
+
+        price_query = price_search_query(identity)
+        price_error = None
+        if price_query:
+            capability, prices = await asyncio.gather(
+                self.search(client, search_key, search_query(identity), "s"),
+                self.search(client, search_key, price_query, "p"),
+                return_exceptions=True,
+            )
+            if isinstance(capability, BaseException):
+                raise capability
+            sources = capability
+            if isinstance(prices, asyncio.CancelledError):
+                raise prices
+            if isinstance(prices, ClassifierError):
+                price_error = prices.code
+            elif isinstance(prices, BaseException):
+                raise prices
+            else:
+                sources += prices
+        else:
+            sources = await self.search(client, search_key, search_query(identity), "s")
         findings, response_model, usage = unknown_findings(), "", {}
         if sources:
             body = {
@@ -504,7 +785,7 @@ class CapabilityResearch:
                         "role": "user",
                         "content": json.dumps(
                             {
-                                "model": identity.model_dump(),
+                                "model": self.research_identity(identity),
                                 "sources": [s.model_dump() for s in sources],
                             },
                             ensure_ascii=False,
@@ -525,8 +806,12 @@ class CapabilityResearch:
                 if choice.get("finish_reason") != "stop":
                     raise ValueError("truncated or tool response")
                 parsed = strict_json(choice["message"]["content"])
-                # An unverified identity cannot supply any usable claims. Discard all of
-                # them, including speculative levels or malformed ancillary fields.
+                # Capability identity and provider pricing are independent evidence.
+                pricing = (
+                    parse_price(parsed.get("pricing"))
+                    if isinstance(parsed, dict)
+                    else PriceFindings()
+                )
                 findings = (
                     unknown_findings()
                     if isinstance(parsed, dict) and parsed.get("identity_status") == "unverified"
@@ -534,6 +819,7 @@ class CapabilityResearch:
                 )
                 if unresolved_alias(identity, findings, sources):
                     findings = unknown_findings()
+                findings.pricing = resolve_researched_price(identity, pricing, sources)
                 validate_findings(findings, sources)
                 response_model = str(response.get("model", ""))[:200]
                 # Preserve usage counters only, not arbitrary provider payloads.
@@ -563,7 +849,10 @@ class CapabilityResearch:
             findings=findings,
             sources=sources,
             usage=usage,
+            price_error=price_error,
         )
+        profile.pricing_retry_after = self.price_deadline(profile)
+        self.preserve_price(profile, cached)
         self.save(profile)
         return profile
 
@@ -571,20 +860,32 @@ class CapabilityResearch:
         if not self.settings.enabled:
             raise ClassifierError("RESEARCH_DISABLED")
         profiles = [self.load(m) for m in request.models]
+        if request.action == "ensure":
+            self.share_prices(profiles)
         failures = [self.failure(m) for m in request.models]
         needs_network = request.action != "status" and (
             request.action == "refresh"
-            or any(p is None and f is None for p, f in zip(profiles, failures, strict=True))
+            or any(
+                (p is None and f is None) or self.price_due(p)
+                for p, f in zip(profiles, failures, strict=True)
+            )
         )
         key = search_key = ""
+        credential_error = None
         if needs_network:
-            key = credential(self.settings.api_key_env, self.settings.api_key_file)
-            search_key = credential(
-                self.settings.search_api_key_env,
-                self.settings.search_api_key_file,
-            )
+            try:
+                key = credential(self.settings.api_key_env, self.settings.api_key_file)
+                search_key = credential(
+                    self.settings.search_api_key_env,
+                    self.settings.search_api_key_file,
+                )
+            except ClassifierError as exc:
+                if request.action != "ensure" or any(p is None for p in profiles):
+                    raise
+                credential_error = exc.code  # Valid capability cards remain usable.
         finished = 0
-        fatal = None
+        fatal = credential_error
+        completed_profiles = []
         async with httpx.AsyncClient(
             trust_env=False,
             follow_redirects=False,
@@ -596,7 +897,10 @@ class CapabilityResearch:
                 nonlocal finished, fatal
                 error = None
                 profile = cached
-                cache_hit = cached is not None and request.action != "refresh"
+                price_only = (
+                    cached is not None and request.action == "ensure" and self.price_due(cached)
+                )
+                cache_hit = cached is not None and request.action != "refresh" and not price_only
                 cooldown_hit = (
                     cached is None and failure is not None and request.action != "refresh"
                 )
@@ -605,10 +909,32 @@ class CapabilityResearch:
                 if request.action != "status" and not cache_hit and not cooldown_hit:
                     async with self.semaphore:
                         if fatal:
-                            error = fatal
+                            if price_only:
+                                profile = cached.model_copy(deep=True)
+                                profile.price_error = fatal
+                                profile.pricing_retry_after = self.price_deadline(profile)
+                                try:
+                                    self.save(profile)
+                                except OSError:
+                                    pass
+                            else:
+                                error = fatal
                         else:
                             try:
-                                profile = await self.research_one(client, identity, key, search_key)
+                                if price_only:
+                                    profile = await self.research_price(
+                                        client, cached, key, search_key
+                                    )
+                                    if profile.price_error in {
+                                        "RESEARCH_HTTP_401",
+                                        "RESEARCH_HTTP_403",
+                                        "RESEARCH_HTTP_429",
+                                    }:
+                                        fatal = profile.price_error
+                                else:
+                                    profile = await self.research_one(
+                                        client, identity, key, search_key, cached
+                                    )
                             except (ClassifierError, OSError) as exc:
                                 error = (
                                     exc.code
@@ -629,6 +955,7 @@ class CapabilityResearch:
                 finished += 1
                 progress("researching-models", completed=finished, total=len(request.models))
                 card = card_from_profile(identity, profile)
+                completed_profiles.append(profile)
                 return {
                     "candidate": card.model_dump(),
                     "provider": identity.provider,
@@ -636,6 +963,9 @@ class CapabilityResearch:
                     "cache_hit": cache_hit,
                     "cooldown_hit": cooldown_hit,
                     "error": error,
+                    "pricing": price_result(profile, self.now()),
+                    "price_error": profile.price_error if profile else None,
+                    "price_retry_after": profile.pricing_retry_after if profile else None,
                     "status": (
                         "documented" if card.evidence else "unverified" if profile else "missing"
                     ),
@@ -654,6 +984,20 @@ class CapabilityResearch:
                     )
                 )
             )
+            if request.action != "status":
+                changed = self.share_prices(completed_profiles)
+                by_key = {p.cache_key: p for p in completed_profiles if p}
+                for row in rows:
+                    if row["cache_key"] not in changed:
+                        continue
+                    profile = by_key[row["cache_key"]]
+                    row.update(
+                        pricing=price_result(profile, self.now()),
+                        price_error=profile.price_error,
+                        price_retry_after=profile.pricing_retry_after,
+                        record_sha256=digest(profile.model_dump()),
+                        source_urls=[s.url for s in profile.sources],
+                    )
         return {
             "schema_version": "1",
             "researcher": self.settings.model,

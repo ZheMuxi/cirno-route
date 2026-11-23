@@ -18,6 +18,7 @@ from .config import Settings, load_settings
 from .contracts import ClassifyRequest, RuntimeLock
 from .errors import ClassifierError
 from .node_runtime import NodeRuntime
+from .profile_analysis import PROFILE_TIMEOUT_SECONDS, analyze_profile, validate_profile_request
 from .provision import MANIFEST, ensure_binary, ensure_model, provision_lock
 from .research import CapabilityResearch, ResearchRequest
 from .runtime import LlamaRuntime, read_token
@@ -196,6 +197,26 @@ class ManagedClassifier:
             await self.close()
             raise
 
+    async def profile(self, request, progress):
+        # Validate before any runtime startup, research, download or task processing.
+        request = validate_profile_request(request)
+        started = time.monotonic()
+        try:
+            # Includes cold startup: a narrow verifier must not silently become a long install.
+            async with asyncio.timeout(min(PROFILE_TIMEOUT_SECONDS, self.original.timeout_seconds)):
+                await self.ensure(progress)
+                result = await analyze_profile(request, self.settings, self.runtime)
+            result["metadata"]["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
+            result["metadata"]["local_backend"] = self.mode
+            return result
+        except TimeoutError as exc:
+            await self.close()
+            raise ClassifierError("TASK_PROFILE_TIMEOUT") from exc
+        except BaseException:
+            # In particular, drain/close timed-out inference before a later classification.
+            await self.close()
+            raise
+
     async def close(self):
         if self.runtime:
             await self.runtime.close()
@@ -245,10 +266,14 @@ async def serve(settings, directory, *, reuse_existing=True, backend="node-llama
                 )
                 emit({"type": "result", "id": request_id, "result": result})
                 return
+            if packet.get("method") == "task_profile":
+                result = await backend.profile(packet.get("body"), progress)
+                emit({"type": "result", "id": request_id, "result": result})
+                return
             if packet.get("method", "classify") != "classify":
                 raise ClassifierError("UNKNOWN_METHOD")
             request = ClassifyRequest.model_validate(packet["body"])
-            if len(request.model_dump_json().encode()) > settings.max_input_bytes:
+            if len(request.model_input_json().encode()) > settings.max_input_bytes:
                 raise ClassifierError("CONTEXT_TOO_LARGE")
             result = await backend.classify(
                 request,

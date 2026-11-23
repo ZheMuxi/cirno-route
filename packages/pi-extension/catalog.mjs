@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { ClassifierError, requestJson, summarize, validateResult } from './core.mjs';
 import { readFileSync } from 'node:fs';
+import { normalizePricingContext, selectPricingContext } from './pricing-context.mjs';
 
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = code => { throw new ClassifierError(code); };
@@ -84,17 +85,19 @@ export function formatResearch(result) {
     + '\n资料来自联网研究，不代表这些 API 已逐一调用验证。';
 }
 
-function taskBody(text, cards) {
-  return { schema_version: '1', task: { text }, eligible_candidates: cards, relevant_preferences: [] };
+function taskBody(text, cards, pricingContext) {
+  const body = { schema_version: '1', task: { text }, eligible_candidates: cards, relevant_preferences: [] };
+  if (pricingContext !== undefined) body.pricing_context = selectPricingContext(pricingContext, cards);
+  return body;
 }
 
-export function candidateBatches(text, candidates, batchSize = 3, maxBytes = 9500) {
+export function candidateBatches(text, candidates, batchSize = 3, maxBytes = 9500, pricingContext) {
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 8) fail('INVALID_BATCH_SIZE');
   if (!Number.isInteger(maxBytes) || maxBytes < 1000 || maxBytes > 58000) fail('INVALID_BATCH_BUDGET');
   const batches = [];
   let batch = [];
   // Leave room for default fields added by the Python contract; never truncate the task or a card.
-  const fits = cards => Buffer.byteLength(JSON.stringify(taskBody(text, cards))) <= maxBytes;
+  const fits = cards => Buffer.byteLength(JSON.stringify(taskBody(text, cards, pricingContext))) <= maxBytes;
   for (const candidate of [...candidates].sort((a, b) => a.candidate_id.localeCompare(b.candidate_id))) {
     if (!fits([candidate])) fail('CONTEXT_TOO_LARGE');
     if (batch.length && (batch.length >= batchSize || !fits([...batch, candidate]))) {
@@ -108,7 +111,7 @@ export function candidateBatches(text, candidates, batchSize = 3, maxBytes = 950
 
 export async function classifyCatalog(cfg, text, {
   signal, images = false, getModels, research, localClassify, onProgress = () => {},
-  includeTaskProfile = false,
+  includeTaskProfile = false, getPricingContext,
 } = {}) {
   if (images) fail('TEXT_ONLY_CLASSIFIER');
   if (typeof text !== 'string' || !text.trim()) fail('EMPTY_TASK');
@@ -117,9 +120,12 @@ export async function classifyCatalog(cfg, text, {
   const catalog = await eligibleCatalog(cfg, await getModels(), signal);
   if (!catalog.length) fail('NO_ELIGIBLE_MODEL');
   const researched = validateResearch(await research({ models: catalog, action: 'ensure' }), catalog);
+  // Research can update prices. Freeze one snapshot after it completes and reuse it on splits.
+  const pricingContext = getPricingContext
+    ? normalizePricingContext(await getPricingContext(catalog), catalog) : undefined;
   const cards = researched.models.map(row => row.candidate);
   const known = cards.filter(c => c.evidence.length);
-  const batches = candidateBatches(text, known, cfg.batch_size ?? 3, cfg.batch_max_bytes ?? 9500);
+  const batches = candidateBatches(text, known, cfg.batch_size ?? 3, cfg.batch_max_bytes ?? 9500, pricingContext);
   const results = [];
   let contextSplits = 0;
   for (let index = 0; index < batches.length; index++) {
@@ -128,7 +134,7 @@ export async function classifyCatalog(cfg, text, {
     onProgress(`Gemma 分类 ${index + 1}/${batches.length} 批…`);
     let result;
     try {
-      const body = taskBody(text, cards);
+      const body = taskBody(text, cards, pricingContext);
       if (includeTaskProfile && results.length === 0) body.include_task_profile = true;
       result = await localClassify(body, signal);
     } catch (error) {
@@ -144,13 +150,22 @@ export async function classifyCatalog(cfg, text, {
       continue;
     }
     results.push(summarize(validateResult(result, cards)));
+    // Input readiness is task-wide; further candidate batches cannot supply missing material.
+    if (['missing', 'unclear'].includes(results.at(-1).input_status)) break;
   }
+  const inputStatus = results.find(r => ['missing', 'unclear'].includes(r.input_status))?.input_status
+    ?? (results.some(r => r.input_status === 'ready') ? 'ready' : null);
+  const incompleteInput = ['missing', 'unclear'].includes(inputStatus);
   // Missing or ambiguous model identity is deterministically unknown; Gemma cannot guess a score.
   const unknown = cards.filter(c => !c.evidence.length).map(c => ({
     candidate_id: c.candidate_id, quality_level: null, preference_fit_level: null,
     uncertainty: 'high', evidence_ids: [], reason_codes: ['EVIDENCE_INSUFFICIENT'],
   }));
-  const rows = [...results.flatMap(r => r.candidates), ...unknown].map(row => {
+  const predictions = incompleteInput ? cards.map(c => ({
+    candidate_id: c.candidate_id, quality_level: null, preference_fit_level: null,
+    uncertainty: 'high', evidence_ids: [], reason_codes: ['EVIDENCE_INSUFFICIENT'],
+  })) : [...results.flatMap(r => r.candidates), ...unknown];
+  const rows = predictions.map(row => {
     const item = catalog.find(m => m.candidate_id === row.candidate_id);
     return { ...row, model: item.model, provider: item.provider, display_name: item.name };
   });
@@ -159,26 +174,35 @@ export async function classifyCatalog(cfg, text, {
   const source = results.some(r => r.source === 'gemma') ? 'gemma' : 'rules';
   return {
     status: results.some(r => r.status === 'blocked') ? 'blocked'
-      : unknown.length || results.some(r => r.status !== 'ok') ? 'abstain' : 'ok',
-    source, candidates: rows,
+      : incompleteInput || unknown.length || results.some(r => r.status !== 'ok') ? 'abstain' : 'ok',
+    source, candidates: rows, input_status: inputStatus,
     reason_codes: [...new Set([
       ...results.flatMap(r => r.reason_codes),
       ...(unknown.length ? ['CAPABILITY_RESEARCH_INCOMPLETE'] : []),
+      ...(incompleteInput ? ['EVIDENCE_INSUFFICIENT'] : []),
     ])],
     latency_ms: Math.round(performance.now() - started),
     task_sha256: createHash('sha256').update(text).digest('hex'),
     candidate_cards_sha256: hash(cards), pipeline_version: 'v2',
     prompt_sha256: results[0]?.prompt_sha256 ?? null,
+    input_check_prompt_sha256: results[0]?.input_check_prompt_sha256 ?? null,
+    task_profile_prompt_sha256: results[0]?.task_profile_prompt_sha256 ?? null,
     classifier_model: results[0]?.classifier_model ?? null,
     runtime_version: results[0]?.runtime_version ?? null,
     local_backend: results[0]?.local_backend ?? null,
-    task_profile: results[0]?.task_profile ?? null,
+    task_profile: results[0]?.task_profile
+      ? { ...results[0].task_profile, ...(incompleteInput ? { reusable: false } : {}) } : null,
     model_digest: results[0]?.model_digest ?? null,
-    usage: results.flatMap(r => r.usage), batch_count: batches.length,
+    usage: results.flatMap(r => r.usage), batch_count: results.length,
+    planned_batch_count: batches.length,
     context_splits: contextSplits, wire_format: results[0]?.wire_format ?? null,
     wire_prompt_sha256: results[0]?.wire_prompt_sha256 ?? null,
+    pricing_context_prompt_sha256: results[0]?.pricing_context_prompt_sha256 ?? null,
     batches: results.map(r => ({ request_id: r.request_id, status: r.status,
-      candidate_cards_sha256: r.candidate_cards_sha256, latency_ms: r.latency_ms })),
+      candidate_cards_sha256: r.candidate_cards_sha256, latency_ms: r.latency_ms,
+      pricing_context_sha256: r.pricing_context_sha256,
+      pricing_context_prompt_sha256: r.pricing_context_prompt_sha256,
+      generation_schema_sha256: r.generation_schema_sha256 })),
     research: researchSummary(researched),
     capability_records: researched.models.map(row => ({
       candidate_id: row.candidate.candidate_id, cache_key: row.cache_key, status: row.status,

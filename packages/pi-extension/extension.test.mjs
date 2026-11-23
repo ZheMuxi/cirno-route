@@ -85,11 +85,12 @@ test('semantic errors fall back to Gemma, changed price scope misses, and unavai
   const h = habitHarness(t); await h.command('bakarouter');
   for (let i = 0; i < 5; i++) { await h.start(); await h.finish(); }
   h.semantic.embed = async () => { throw Error('private error'); };
-  await h.start(); assert.equal(h.calls, 6); // Failure never blocks the answer or leaks details.
+  await h.start('写一个 Python 函数统计列表中偶数的数量');
+  assert.equal(h.calls, 6); // An unlearned input must encode; failure falls back without leaking details.
   assert(h.notices.every(n => !n.includes('private error')));
   h.semantic.embed = async () => ({ vector: [1, ...Array(383).fill(0)] });
   h.store.lookup = () => ({ provider: 'p', model: 'removed', count: 5, threshold: 5 });
-  await h.start(); assert.equal(h.calls, 7);
+  await h.start('写一个 Python 函数反转列表'); assert.equal(h.calls, 7);
   await h.command('bakaprice', 'premium');
   await h.start(); assert.equal(h.calls, 8);
   await h.command('bakahabits', 'clear'); assert.equal(h.store.read().groups.length, 0);

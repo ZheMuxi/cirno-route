@@ -12,7 +12,7 @@ v0.2.0 新增联网能力研究与完整 Pi 目录分批分类。使用 `/bakamo
 
 ## 启动
 
-先按 [README](../README.md) 安装依赖、配置自己的执行服务和凭据。本文 shell 命令均从仓库根目录运行。本地分类后台由 Pi 扩展按需管理；支持的平台上缺少权重或 llama.cpp 时自动下载并校验，详见 [自动准备与生命周期](pi-managed-runtime.md)。执行网关需要自行提供，项目不附带网关服务。
+先按 [README](../README.md) 安装依赖、配置自己的执行模型和凭据。本文 shell 命令均从仓库根目录运行。本地分类后台由 Pi 扩展按需管理；支持的平台上缺少权重或 llama.cpp 时自动下载并校验，详见 [自动准备与生命周期](pi-managed-runtime.md)。正常使用无需执行网关；如自行选用网关服务，需另外配置。
 
 启动 Pi：
 
@@ -20,7 +20,7 @@ v0.2.0 新增联网能力研究与完整 Pi 目录分批分类。使用 `/bakamo
 ./scripts/start-pi.sh
 ```
 
-相邻目录安装时，也可使用 `../Pi/pi-classifier`。模板默认模型是 `cirno-gateway/claude-sonnet-4-6`；若自己的服务没有该型号，启动时添加 `--model your-provider/your-model`，或使用 Pi 的 `/model` 手动选择已配置的模型。`/classify` 不触发切换，自动路由开启后的普通输入会切换到推荐模型。
+相邻目录安装时，也可使用 `../Pi/pi-classifier`。启动脚本沿用 Pi 保存的默认模型；首次配置执行模型后，可添加 `--model your-provider/your-model`，或使用 Pi 的 `/model` 手动选择。模板只有本地 HTTP 模型入口，不包含云端执行模型或账户凭据。`/classify` 不触发切换，自动路由开启后的普通输入会切换到推荐模型。
 
 | 操作 | 行为 |
 | --- | --- |
@@ -33,7 +33,7 @@ v0.2.0 新增联网能力研究与完整 Pi 目录分批分类。使用 `/bakamo
 
 普通输入自动路由默认关闭，需要输入 `/bakarouter` 开启；此开关仅作用于当前扩展实例，重启 Pi 或 `/reload` 后恢复关闭。`/classify` 始终可用。
 
-分类只读取本次用户文本，不收集历史偏好、工作目录内容、工具结果或完整历史。续传的工具循环不重复分类或选模。附图任务显示 `TEXT_ONLY_CLASSIFIER`；过大输入显示 `CONTEXT_TOO_LARGE`，不截断。分类失败、没有合格推荐或切换失败时提示并保留当前模型；极少数切换后恢复失败的情况会停止本轮。部分候选弃权时，有依据且达标的候选仍可参与。该回退策略不是外发拦截。
+分类只读取本次用户文本，不收集历史偏好、工作目录内容、工具结果或完整历史。续传的工具循环不重复分类或选模。附图任务显示 `TEXT_ONLY_CLASSIFIER`；过大输入显示 `CONTEXT_TOO_LARGE`，不截断。开启自动路由时，缺少任务材料、分类失败、没有合格推荐或切换失败均停止本轮回答并提示原因。仅因部分候选资料未知而弃权时，其他有依据且达标的候选仍可参与。文件外发限制由独立的[文件保护](file-privacy.md)执行。
 
 只有 `/classify` 会显示并保存评分卡片。普通输入的自动分类不追加评分条目，重新打开会话也不会重现这些隐藏评分；失败时只给简短提示。实际回答模型从 assistant 消息的 provider/model 读取，显示为独立的 `cirno-execution-model` 条目；关闭自动分类也会显示。同一回答的工具续传不重复相同模型名，中途确实更换模型时会另行提示。
 
@@ -50,21 +50,23 @@ v0.2.0 新增联网能力研究与完整 Pi 目录分批分类。使用 `/bakamo
 
 - 分类运行时：本地 `cirno-gemma-e4b`，默认由插件内置的 `node-llama-cpp` 加载，不监听推理端口。通过 `scripts/start-pi-llama.sh` 显式选择旧后端时，可复用已验证的 18080 服务，或由插件启动随机回环端口的私有 llama.cpp。详见 [原生后端](native-runtime.md)。
 - Pi 通过管道调用 Python 分类后台，不依赖分类 HTTP API；18081仍可作为独立开发接口使用。
-- 网关接口由 `config/pi-classifier.json` 的 `gateway_url` 配置，并与 Pi provider 的 `baseUrl` 保持一致；`http://127.0.0.1:8045/v1` 仅为模板示例。目录查询只允许字面回环 HTTP 地址。密钥保存在 `.runtime/gateway.token`，权限 0600；`.runtime` 为 0700。
-- Pi 的 `.state/models.json` 使用 `"apiKey": "CIRNO_GATEWAY_API_KEY"` 引用环境变量，启动器读取密钥；不在源码或报告中记录密钥值。
-- 候选来源：`config/pi-classifier.json` 当前为 `pi`，读取 Pi 完整可用目录，网关候选与所配置网关的 `/models` 求交集；模型资料来自独立能力缓存。
-- 切回 `configured` 模式时使用配置文件中的候选卡；模板含 Sonnet 4.6、Opus 4.6、Gemini 3 Flash 三张示例卡，应按自己的可用模型和能力依据调整。
-- 32,768 上下文和 2,048 输出是当前 Pi 客户端的保守配置上限，不表示网关模型真实能力上限。若网关未提供价格，Pi 可能显示零成本，不应解释为免费。
+- 执行模型及其认证由 Pi 管理；本地凭据文件应设为 0600，不在源码或报告中记录密钥值。启动脚本不读取或注入网关密钥。
+- 候选来源：`config/pi-classifier.json` 当前为 `pi`，读取 Pi 完整可用目录，`candidates` 为空；模型资料来自独立能力缓存，不要求网关地址或网关密钥。
+- 安装模板中的 `cirno-local/cirno-gemma-e4b` 是本地 HTTP 对话入口，需要对应 HTTP 服务。内置 `node-llama-cpp` 分类后台不监听此接口；使用云端执行模型时，应另行配置供应商与认证。
+- `configured` 是旧的固定候选兼容模式，须自行填写 1–8 张候选卡、能力证据、`gateway_url` 和 `gateway_token_file`；不能仅修改模式而保留当前空候选。
+- 云端模型的 32,768 上下文和 2,048 输出是当前客户端的保守配置上限，不表示供应商模型真实能力上限。Pi 未配置价格时可能显示零成本，不应解释为免费。
 
-回环网关仍可能向外部模型转发请求。`/classify` 的任务正文只进入本地分类后台和 llama.cpp；目录查询访问已配置网关，能力研究只发送模型标识。普通 Pi 对话按所选 provider 发送执行上下文。
+可选的旧网关兼容接入须将 `gateway_url` 与 Pi provider 的 `baseUrl` 保持一致，目录查询只允许字面回环 HTTP 地址，并将 `cirno-gateway` 候选与其 `/models` 求交集。回环网关仍可能向外部模型转发请求。`/classify` 的任务正文只进入本地分类后台和 llama.cpp；能力研究只发送模型标识。普通 Pi 对话按所选 provider 发送执行上下文。
 
-示例候选的 `gateway-alias-2026-10-14` 是历史配置快照标签，不是供应商 checkpoint。网关未给出可验证的后端 revision；记录的实际模型是 Pi 使用的 provider/model ID，不能证明网关内部没有重映射。
+安装模板不再包含 `cirno-gateway`。要添加云端回答模型，请在 Pi 配置自己的供应商、模型标识和凭据，重启后用 `/model` 查看可用项。模型目录按各自账户权限确定，不随仓库分发。
+
+以下初始接入记录中的 `gateway-alias-2026-10-14` 是历史配置快照标签，不是供应商 checkpoint；相关候选卡已从当前配置删除。当时网关未给出可验证的后端 revision；记录的实际模型是 Pi 使用的 provider/model ID，不能证明网关内部没有重映射。
 
 ## 能力资料依据
 
-初始示例卡片均标记为 `configured`，没有 `measured` 数据。本阶段 `relevant_preferences` 始终为空，`preference_fit_level` 必须为 null。0–4 分是 Gemma 根据资料给出的质量适配等级，价格不改变分数，也不当作成功概率。Pi 在评分后独立应用价格偏好生成推荐。
+初始示例卡片均标记为 `configured`，没有 `measured` 数据；当前模板不再携带这些卡片，Pi 目录模式通过独立能力研究获取资料。Gemma 分类请求的 `relevant_preferences` 始终为空，`preference_fit_level` 必须为 null。0–4 分是 Gemma 根据资料给出的质量适配等级，价格不改变分数，也不当作成功概率。Pi 在评分后独立应用价格偏好生成推荐。
 
-资料来自供应商公开描述：[Anthropic Sonnet 4.6](https://www.anthropic.com/news/claude-sonnet-4-6)、[Anthropic Opus 4.6](https://www.anthropic.com/news/claude-opus-4-6)、[Google Gemini 3 Flash](https://blog.google/innovation-and-ai/technology/developers-tools/build-with-gemini-3-flash/)。这是配置依据，尚未验证该网关模型在本项目任务上的实际成功率。
+初始卡片资料来自供应商公开描述：[Anthropic Sonnet 4.6](https://www.anthropic.com/news/claude-sonnet-4-6)、[Anthropic Opus 4.6](https://www.anthropic.com/news/claude-opus-4-6)。这是历史配置依据，不能据此认定网关模型在本项目任务上的实际成功率。
 
 ## 已完成实测
 

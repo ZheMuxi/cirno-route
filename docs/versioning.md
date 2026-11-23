@@ -10,10 +10,9 @@
 
 ## 当前版本
 
-v0.4.0 增加插件内置 E5 语义匹配与按成功使用次数形成的习惯路由，继续采用 Gemma 4 E4B、0–4 分制、V2.1 评分标准及默认 `node-llama-cpp` 后端。原 V2 提示词、旧 `llama-server` 后端及全部历史标签保留。
-
-- `v0.4.0`：当前版本，包含五次默认门槛、习惯命中不强化、手动与自动选模计数、本地多语言语义匹配及习惯管理命令。功能与限制见 [版本说明](../releases/v0.4.0.md)。
-- `v0.3.0`：前版及本次完整源码回退目标，包含评分标准优化、默认原生推理、旧后端切换入口及固定依赖，不读取习惯库。历史说明见 [版本说明](../releases/v0.3.0.md)。
+- `v0.5.0`：当前版本。新增文件保护、官方 API 参考价格同步及跨语言习惯核验；使用方式与回退步骤见 [版本说明](../releases/v0.5.0.md)。
+- `v0.4.0`：上一版，含 E5 语义匹配及习惯路由。此版本没有文件保护；需要继续限制文件外发时请勿回退。
+- `v0.3.0`：使用内置原生推理和 V2.1 评分标准，不读取习惯库。
 - `v0.2.0`：更早版本，使用 V2 提示词与插件管理的 llama-server，已包含能力研究、价格偏好及 Pi 实际路由。
 - `docs-v0.2.0-portable-docs`：其余指南、历史评测说明和发布说明的通用化文档快照；功能版本仍为 0.2.0，提示词、运行时及依赖锁未变。
 - `docs-v0.2.0-public-readme`：公开仓库的通用 README 文档快照，功能版本仍为 0.2.0；原功能发布标签保持不变。
@@ -21,7 +20,7 @@ v0.4.0 增加插件内置 E5 语义匹配与按成功使用次数形成的习惯
 - `v0.1.0-v3-baseline`：切换前的 V3 完整源码快照，保留用于回退和比较。
 - Python 项目、模块、Pi 插件、原生包与语义包共同使用项目版本；提示词及任务类型 schema 独立编号。发布标签固定，后续修复另发新版本。
 - 实际机器上的密钥、会话、模型缓存与日志保留在 `.runtime/`、`../Pi/.state/`、已有模型缓存中，不进入 Git，也不随代码版本回退。
-- `releases/v0.4.0.md` 记录当前版本的功能、使用方式和限制；旧发布记录继续保留。实际 GGUF 和 llama.cpp 下载由 `src/cirno_route/resources/local-runtime-v1.json` 固定并校验，E5 下载由 `packages/pi-extension/semantic-runtime/model.json` 固定并校验。
+- `releases/v0.5.0.md` 记录当前版本的功能、使用方式和限制；旧发布记录继续保留。实际 GGUF 和 llama.cpp 下载由 `src/cirno_route/resources/local-runtime-v1.json` 固定并校验，E5 下载由 `packages/pi-extension/semantic-runtime/model.json` 固定并校验。
 
 ## 2026-10-20 恢复验证
 
@@ -72,7 +71,7 @@ uv sync --frozen --python 3.12
 5. 回到当前版本并恢复锁定的原生与语义依赖：
 
 ```bash
-git switch --detach v0.4.0
+git switch --detach v0.5.0
 uv sync --frozen --python 3.12
 ./scripts/install-native-runtime.sh
 ./scripts/install-semantic-runtime.sh
