@@ -9,13 +9,34 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def valid_classification(result, price_mode):
+    routing = result.get("routing", {})
+    if result.get("source") != "gemma" or routing.get("price_preference") != price_mode:
+        return False
+    if result.get("score_scale") != 10:
+        return len(result["candidates"]) == result.get("research", {}).get("total")
+    return (
+        result.get("pipeline_version") == "task-percentiles-v1"
+        and routing.get("policy_version") == "benchmark-price-v1"
+        and any(
+            row["provider"] == routing.get("provider")
+            and row["model"] == routing.get("model")
+            and row.get("hard_ok")
+            and row.get("evidence_ids")
+            for row in result["candidates"]
+        )
+    )
+
+
 async def main():
     os.umask(0o077)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     path = ROOT / ".runtime" / f"pi-routing-{stamp}"
     preferences = ROOT / ".runtime/router-preferences.json"
     original = preferences.read_bytes() if preferences.exists() else None
-    settings = ROOT.parent / "Pi/.state/settings.json"
+    settings = (
+        Path(os.environ.get("PI_CODING_AGENT_DIR", ROOT.parent / "Pi/.state")) / "settings.json"
+    )
 
     def defaults():
         data = json.loads(settings.read_text()) if settings.exists() else {}
@@ -138,13 +159,12 @@ async def main():
             "answer",
         ]
         and [r["price_preference"] for r in routes] == ["cheap", "premium"]
-        and routes[0]["model"] != routes[1]["model"]
+        and [(r["provider"], r["model"]) for r in routes]
+        == [(r["routing"].get("provider"), r["routing"].get("model")) for r in results[:2]]
         and labels == [f"{m['provider']}/{m['model']}" for m in assistants]
         and labels == [f"{r['provider']}/{r['model']}" for r in routes] + [labels[1]] * 2
         and all(
-            r.get("source") == "gemma"
-            and len(r["candidates"]) == r["research"]["total"]
-            and r.get("routing", {}).get("price_preference") == mode
+            valid_classification(r, mode)
             for r, mode in zip(results, ("cheap", "premium", "cheap"), strict=True)
         )
         and all(

@@ -7,6 +7,7 @@ from pathlib import Path
 
 from pydantic import Field, ValidationError, field_validator
 
+from .benchmark_sources import DIMENSIONS, SPECIALTIES
 from .contracts import Contract, RuntimeLock
 from .errors import ClassifierError
 from .runtime import sha256
@@ -100,11 +101,47 @@ def decode_analysis(raw):
         raise ClassifierError("TASK_PROFILE_INVALID") from exc
 
 
-async def analyze_profile(request, settings, runtime):
+async def analyze_profile(request, settings, runtime, *, benchmarks=False):
     """One verified completion. The caller owns the shared runtime and its provisioning."""
     request = validate_profile_request(request)
     started = time.monotonic()
     schema = analysis_schema()
+    prompt = PROFILE_PROMPT
+    if benchmarks:
+        extra = {
+            "primary": {"type": "string", "enum": list(DIMENSIONS)},
+            "webdev_focus": {
+                "type": "string",
+                "enum": ["overall", "webdev_react", "webdev_html", "image_to_webdev"],
+            },
+            "secondary": {"type": "string", "enum": ["none", *DIMENSIONS]},
+            "specialty": {"type": "string", "enum": list(SPECIALTIES)},
+            "context_tokens": {"type": "string", "maxLength": 12},
+        }
+        schema["properties"].update(extra)
+        schema["required"].extend(extra)
+        prompt = prompt.replace(
+            "只输出 input_status 和 task_profile 两个字段的 JSON", "输出符合给定结构的 JSON"
+        )
+        prompt += (
+            "\n另给 primary 主能力与 secondary 次能力，单项任务次能力为 none。"
+            "frontend=网页界面与交互，coding=其他编程，math=计算或证明，reasoning=逻辑与分析，"
+            "knowledge=知识事实，text=语言写作翻译，chinese=以中文语言文化能力为交付目标。"
+            "中文提问本身不等于中文能力任务。前端开发以 frontend 为主。独立次目标才给次能力。"
+            "webdev_focus 仅在明确指定 React、纯 HTML 或从图片做网页时选对应分项，其余填 overall。"
+            "specialty 表示明确的专项，例如性能优化 optimization、算法对抗 algorithm_contest、"
+            "空间推理 spatial、"
+            "几何建模 geometry、游戏开发 game_development、物理仿真 physics、图形渲染 rendering、"
+            "数据分析 data_analysis、科学推理 science。其余填 general。"
+            "context_tokens 填用户明确要求的最小上下文 token 数的十进制整数字符串，未指定填 0。"
+            "\n先判断最终交付物，再定能力。React/Vue 组件、网页界面、交互式网站、HTML/CSS 页面都以"
+            " frontend 为主，要求返回源代码或 kind=code_implement 也一样。"
+            "例如“用 React 写书架组件，给源码” => primary=frontend, secondary=none, "
+            "webdev_focus=webdev_react。“实现 REST 服务和 SQL 查询” => primary=coding, "
+            "secondary=none, webdev_focus=overall。“用纯 HTML 和 CSS 制作登录页” => "
+            "primary=frontend, secondary=none, webdev_focus=webdev_html。"
+            "证明命题以 math 为主，解释 React 概念与实现网页界面是两种交付。"
+        )
     payload = json.dumps(
         {"task": {"text": request.text}}, ensure_ascii=False, separators=(",", ":")
     )
@@ -119,11 +156,31 @@ async def analyze_profile(request, settings, runtime):
             await runtime.verify(lock)
             raw, usage = await runtime.complete(
                 [
-                    {"role": "system", "content": PROFILE_PROMPT},
+                    {"role": "system", "content": prompt},
                     {"role": "user", "content": payload},
                 ],
                 schema,
             )
+            needs = {}
+            if benchmarks:
+                obj = strict_json(raw)
+                try:
+                    needs = {key: obj.pop(key) for key in extra}
+                    if (
+                        needs["primary"] not in DIMENSIONS
+                        or needs["webdev_focus"] not in extra["webdev_focus"]["enum"]
+                        or needs["specialty"] not in SPECIALTIES
+                        or needs["secondary"] not in ("none", *DIMENSIONS)
+                        or not isinstance(needs["context_tokens"], str)
+                        or not needs["context_tokens"].isascii()
+                        or not needs["context_tokens"].isdigit()
+                        or len(needs["context_tokens"]) > 12
+                    ):
+                        raise ValueError
+                    needs["context_tokens"] = int(needs["context_tokens"])
+                except (KeyError, TypeError, ValueError, AttributeError) as exc:
+                    raise ClassifierError("TASK_PROFILE_INVALID") from exc
+                raw = json.dumps(obj)
             state, profile = decode_analysis(raw)
             await runtime.verify(lock)
     except TimeoutError as exc:
@@ -133,14 +190,15 @@ async def analyze_profile(request, settings, runtime):
         await runtime.close()
         raise
     return {
+        **needs,
         "schema_version": "1",
         "input_status": state,
         "task_profile": profile.model_dump(),
         "metadata": {
             "latency_ms": round((time.monotonic() - started) * 1000, 2),
             "task_sha256": sha256(request.text),
-            "prompt_version": PROFILE_PROMPT_VERSION,
-            "prompt_sha256": sha256(PROFILE_PROMPT),
+            "prompt_version": "benchmark-needs-v1" if benchmarks else PROFILE_PROMPT_VERSION,
+            "prompt_sha256": sha256(prompt),
             "generation_schema_sha256": sha256(json.dumps(schema, sort_keys=True)),
             "model": lock.model,
             "model_digest": lock.model_digest,
