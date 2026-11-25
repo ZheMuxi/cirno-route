@@ -1,6 +1,7 @@
 {
   "schema_version": "1",
   "candidate_source": "pi",
+  "leaderboards": { "models": {} },
   "batch_size": 8,
   "batch_max_bytes": 28000,
   "pricing_file": "model-prices.json",

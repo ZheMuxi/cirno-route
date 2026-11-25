@@ -9,9 +9,7 @@ export async function switchRecommendedModel(result, options) {
   if (options.signal?.aborted || !options.isActive()) return { status: 'skipped' };
   const route = result.routing;
   const row = result.candidates.find(c => c.candidate_id === route?.recommended_candidate_id);
-  if (!row || result.source !== 'gemma' || result.status === 'blocked'
-      || ['missing', 'unclear'].includes(result.input_status) || !Number.isInteger(row.quality_level)
-      || row.quality_level < 3 || row.quality_level > 4 || !row.evidence_ids?.length
+  if (!suitable(result, row)
       || row.provider !== route.provider || row.model !== route.model) {
     throw new RoutingError('ROUTER_NO_SUITABLE_MODEL');
   }
@@ -69,3 +67,4 @@ async function switchTargetModel(target, {
   }
   return { ...outcome, status: 'switched' };
 }
+import { suitable } from './pricing.mjs';

@@ -12,6 +12,9 @@ from pathlib import Path
 
 import httpx
 
+from .benchmark_scoring import TaskScores
+from .benchmark_search import DeepSeekSupplement
+from .benchmark_store import BoardStore
 from .classifier import Classifier
 from .cli import private_write
 from .config import Settings, load_settings
@@ -197,15 +200,21 @@ class ManagedClassifier:
             await self.close()
             raise
 
-    async def profile(self, request, progress):
+    async def profile(self, request, progress, *, benchmarks=False):
         # Validate before any runtime startup, research, download or task processing.
         request = validate_profile_request(request)
         started = time.monotonic()
         try:
             # Includes cold startup: a narrow verifier must not silently become a long install.
-            async with asyncio.timeout(min(PROFILE_TIMEOUT_SECONDS, self.original.timeout_seconds)):
+            async with asyncio.timeout(
+                7200 if benchmarks else min(PROFILE_TIMEOUT_SECONDS, self.original.timeout_seconds)
+            ):
                 await self.ensure(progress)
-                result = await analyze_profile(request, self.settings, self.runtime)
+                result = (
+                    await analyze_profile(request, self.settings, self.runtime, benchmarks=True)
+                    if benchmarks
+                    else await analyze_profile(request, self.settings, self.runtime)
+                )
             result["metadata"]["latency_ms"] = round((time.monotonic() - started) * 1000, 2)
             result["metadata"]["local_backend"] = self.mode
             return result
@@ -242,6 +251,7 @@ def emit(value):
 async def serve(settings, directory, *, reuse_existing=True, backend="node-llama-cpp"):
     backend = ManagedClassifier(settings, directory, reuse_existing=reuse_existing, backend=backend)
     research = CapabilityResearch(settings.capability_research)
+    board_store = None
     loop = asyncio.get_running_loop()
     stop = asyncio.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
@@ -255,6 +265,7 @@ async def serve(settings, directory, *, reuse_existing=True, backend="node-llama
     stop_task = asyncio.create_task(stop.wait())
 
     async def handle(packet):
+        nonlocal board_store
         request_id = packet["id"]
         try:
             progress = lambda stage, **details: emit(  # noqa: E731
@@ -268,6 +279,38 @@ async def serve(settings, directory, *, reuse_existing=True, backend="node-llama
                 return
             if packet.get("method") == "task_profile":
                 result = await backend.profile(packet.get("body"), progress)
+                emit({"type": "result", "id": request_id, "result": result})
+                return
+            if packet.get("method") == "benchmark_profile":
+                result = await backend.profile(packet["body"], progress, benchmarks=True)
+                emit({"type": "result", "id": request_id, "result": result})
+                return
+            if packet.get("method") in {"board_admin", "board_score"}:
+                if board_store is None:
+                    board_store = BoardStore(directory / "leaderboards")
+                body = packet["body"]
+                if packet["method"] == "board_score":
+                    conf = settings.capability_research
+                    scores = TaskScores(
+                        board_store,
+                        DeepSeekSupplement(research),
+                        concurrency=conf.concurrency,
+                        ttl=conf.ttl_hours * 3600,
+                        unknown_ttl=conf.unknown_ttl_hours * 3600,
+                        retry=conf.failure_retry_seconds,
+                    )
+                    result = await scores.score(body["needs"], body["models"])
+                elif body["action"] in {"due", "refresh"}:
+                    result = await board_store.refresh(body["action"] == "refresh")
+                elif body["action"] == "status":
+                    result = board_store.status()
+                elif body["action"] == "import":
+                    try:
+                        result = board_store.import_file(body["source"], body["path"])
+                    except (OSError, ValueError, KeyError, TypeError) as exc:
+                        raise ClassifierError("INVALID_OFFICIAL_SNAPSHOT") from exc
+                else:
+                    raise ClassifierError("UNKNOWN_METHOD")
                 emit({"type": "result", "id": request_id, "result": result})
                 return
             if packet.get("method", "classify") != "classify":

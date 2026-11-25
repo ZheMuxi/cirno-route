@@ -141,19 +141,30 @@ const expensive = (a, b) => {
   return (aKnown ? cost(b) - cost(a) : 0) || a.candidate_id.localeCompare(b.candidate_id);
 };
 
+export function suitable(result, row) {
+  if (!row || result.source !== 'gemma' || result.status === 'blocked'
+    || ['missing','unclear'].includes(result.input_status) || !row.evidence_ids?.length) return false;
+  if (result.score_scale !== 10) return Number.isInteger(row.quality_level) && row.quality_level >= 3 && row.quality_level <= 4;
+  if (row.hard_ok !== true) return false;
+  if (row.basis === 'inferred') return row.quality_level === null && row.coverage === 0;
+  return ['measured','partial'].includes(row.basis) && row.coverage > 0 && row.coverage <= 1
+    && Number.isFinite(row.quality_level) && row.quality_level >= 0 && row.quality_level <= 10;
+}
+
 export function recommend(result, book, mode = 'balanced', now = new Date()) {
   if (!Object.hasOwn(PRICE_MODES, mode)) fail('PRICE_PREFERENCE_INVALID');
   const candidates = result.candidates.map(row => ({
     ...row, pricing: resolvePrice(book, row.provider, row.model, now),
   }));
   // Unknown/unsupported/partial capabilities never become suitable merely by being cheap.
-  const eligible = result.status === 'blocked' || ['missing', 'unclear'].includes(result.input_status)
-    || result.source !== 'gemma' ? []
-    : candidates.filter(r => Number.isInteger(r.quality_level) && r.quality_level >= 3
-      && r.quality_level <= 4 && r.evidence_ids?.length);
-  const highest = Math.max(0, ...eligible.map(r => r.quality_level));
-  const top = eligible.filter(r => r.quality_level === highest).sort(mode === 'premium' ? expensive : cheap);
-  const comparable = eligible.filter(r => r.quality_level >= highest - 1
+  const ten = result.score_scale === 10;
+  const qualified = candidates.filter(r => suitable(result, r));
+  const coverage = Math.max(0, ...qualified.map(r => r.coverage ?? 0));
+  const eligible = ten ? qualified.filter(r => r.coverage === coverage) : qualified;
+  const highest = Math.max(-1, ...eligible.map(r => r.quality_level ?? -1));
+  const top = eligible.filter(r => (r.quality_level ?? -1) === highest).sort(mode === 'premium' ? expensive : cheap);
+  const tolerance = ten ? (mode === 'cheap' ? 2 : 0.5) : 1;
+  const comparable = eligible.filter(r => (r.quality_level ?? -1) >= highest - tolerance
     && r.pricing.status === 'known').sort(cheap);
   let selected = top[0] ?? null;
   let reason = selected ? (mode === 'premium' ? 'QUALITY_FIRST_EXPENSIVE_TIE' : 'QUALITY_FIRST')
@@ -175,10 +186,10 @@ export function recommend(result, book, mode = 'balanced', now = new Date()) {
   });
   return { ...result, candidates,
     routing: {
-      policy_version: 'quality-price-v1', price_preference: mode,
+      policy_version: ten ? 'benchmark-price-v1' : 'quality-price-v1', price_preference: mode,
       recommended_candidate_id: selected?.candidate_id ?? null,
       provider: selected?.provider ?? null, model: selected?.model ?? null,
-      reason, minimum_quality: 3,
+      reason, minimum_quality: ten ? null : 3,
       comparison: { currency: 'USD', input_tokens: 1000, output_tokens: 1000, cache_hit_ratio: 0 },
       known_prices: candidates.filter(r => r.pricing.status === 'known').length,
       unknown_prices: candidates.filter(r => ['unknown', 'stale'].includes(r.pricing.status)).length,
@@ -210,6 +221,10 @@ export function formatRecommendation(routing) {
     PRICE_UNKNOWN_QUALITY_ONLY: '缺少可比价格，退回能力优先',
     NO_SUITABLE_CANDIDATE: '当前没有可推荐的候选，需要有效分类、必要任务资料及至少 3/4 的有依据评分',
   };
+  if (routing.policy_version === 'benchmark-price-v1') {
+    reasons.LARGE_SAVING_WITH_SMALL_QUALITY_GAP = '能力差距不超过 0.5 分，参考成本节省超过三分之二';
+    reasons.NO_SUITABLE_CANDIDATE = '当前缺少满足硬性要求且有任务能力依据的候选';
+  }
   return `价格偏好：${PRICE_MODES[routing.price_preference]} · 推荐：`
     + (routing.model ? `${routing.provider}/${routing.model}` : '暂不推荐')
     + `\n${reasons[routing.reason] ?? routing.reason}`;
