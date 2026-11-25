@@ -1,6 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from '@earendil-works/pi-coding-agent';
 import { Text } from '@earendil-works/pi-tui';
 import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
+import { BoardRouting, formatBoards } from './benchmark-routing.mjs';
 import { randomUUID } from 'node:crypto';
 import { classify, ClassifierError, formatResult, readConfig } from './core.mjs';
 import { LocalBackend } from './local-backend.mjs';
@@ -14,6 +16,8 @@ import { HabitStore, HabitError, hash, habitScope, manualTaskProfile, validProfi
 import { createPrivacyGuard } from './privacy.mjs';
 import { PrivacyError } from './privacy-policy.mjs';
 import { ModelHealth } from './model-health.mjs';
+import { binding, TEAM_GUIDE, TeamError, TeamTurn } from './team-router.mjs';
+import { registerTeamTools, TEAM_TOOLS } from './team-tools.mjs';
 
 type RecordData = Awaited<ReturnType<typeof classify>> | { error: string };
 const ENTRY = 'cirno-classification';
@@ -23,13 +27,37 @@ const TURN_GUIDELINE = '遵守本轮用户明确要求的交付内容和输出�
 export default function (pi: ExtensionAPI) {
   const cfg = readConfig(fileURLToPath(new URL('../../config/pi-classifier.json', import.meta.url)));
   const backend = new LocalBackend(fileURLToPath(new URL('../..', import.meta.url)));
-  registerClassifier(pi, cfg, backend);
+  registerClassifier(pi, cfg, backend, undefined, undefined,
+    cfg.leaderboards ? new LocalBackend(backend.project) : undefined);
 }
 
 export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof readConfig>,
   backend: LocalBackend, classifyFn = cfg.candidate_source === 'pi' ? classifyCatalog : classify,
-  habitServices?: { store: HabitStore; semantic: SemanticBackend; manualProfile?: typeof manualTaskProfile }) {
+  habitServices?: { store: HabitStore; semantic: SemanticBackend; manualProfile?: typeof manualTaskProfile },
+  boardAdmin?: LocalBackend) {
+  const boards = cfg.leaderboards ? new BoardRouting(cfg.leaderboards, backend, boardAdmin ?? backend) : null;
   let automatic = false;
+  let superMode = false;
+  let team: TeamTurn | null = null;
+  let preparingTeam: AbortController | null = null;
+  let abortTeamRun: (() => void) | null = null;
+  let lastTeam: ReturnType<TeamTurn['status']> | null = null;
+  const modeLabel = () => superMode ? '协作路由：开' : automatic ? '自动路由：开' : '自动路由：关';
+  function closeTeam(cancelRun = false) {
+    if (cancelRun) preparingTeam?.abort();
+    if (team) { lastTeam = team.close(); team = null; }
+    const abort = abortTeamRun; abortTeamRun = null;
+    if (cancelRun) abort?.();
+  }
+  function setTeamTools(enabled: boolean) {
+    if (!pi.getActiveTools || !pi.setActiveTools || !pi.registerTool) return !enabled;
+    const current = pi.getActiveTools();
+    const next = current.filter(name => !TEAM_TOOLS.includes(name));
+    if (enabled) next.push(...TEAM_TOOLS);
+    if (next.length !== current.length || next.some((n, i) => current[i] !== n)) pi.setActiveTools(next);
+    return !enabled || TEAM_TOOLS.every(name => pi.getActiveTools().includes(name));
+  }
+  if (pi.registerTool) registerTeamTools(pi, () => superMode ? team : null);
   let busy = false;
   let displayedModel: string | null = null;
   let routeEpoch = 0;
@@ -53,6 +81,7 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
   // Store only derived vectors/labels in this process; never task text or a cached model choice.
   const verifiedTasks = new Map<string, { vector: number[]; profile: any; groupKey: string }>();
   const privacy = createPrivacyGuard(pi, cfg, { onChange: () => {
+    closeTeam(true);
     routeEpoch++; pendingUse = null; manualModel = null;
     verifiedTasks.clear();
     for (const controller of active) controller.abort();
@@ -112,6 +141,65 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
     else process.stderr.write(JSON.stringify({ type: 'cirno-classifier-warning', error }) + '\n');
   }
 
+  function teamNotice(ctx: ExtensionContext, message: string) {
+    if (ctx.mode === 'tui' || ctx.mode === 'rpc') ctx.ui.notify(message, 'info');
+    else process.stderr.write(JSON.stringify({ type: 'cirno-team', message }) + '\n');
+  }
+  function teamModels(ctx: ExtensionContext) {
+    // The team tools are opaque tools under the existing file policy. Assign only
+    // trusted/local bindings when rules exist; do not weaken that policy by tool name.
+    const rules = privacy.policy?.hasRules();
+    return privacy.models(ctx, ctx.modelRegistry.getAvailable()).filter(m => health.isAvailable(m)
+      && m.api !== 'pi-virtual' && (!rules || privacy.policy!.allowed(m))
+      && (!ctx.scopedModels?.length || ctx.scopedModels.some(s => binding(s.model) === binding(m))));
+  }
+  function guardTeam(ctx: ExtensionContext, data: unknown) {
+    privacy.restricted(ctx, data);
+    if (!privacy.enforce(ctx) || !teamModels(ctx).some(m => binding(m) === binding(ctx.model))) {
+      ctx.abort();
+      throw new PrivacyError('PRIVACY_TEAM_COORDINATOR_UNAVAILABLE');
+    }
+  }
+  async function scoreTask(text: string, ctx: ExtensionContext, { signal, getModels, limitConfigured,
+    images = false, includeTaskProfile = false, worker = false, coordinator = false, onProgress }) {
+    if (boards) return boards.score(cfg, text, {signal, images, worker, coordinator, onProgress,
+      activeTools: pi.getActiveTools?.() ?? [], thinking: pi.getThinkingLevel?.(),
+      getModels: () => getModels().filter(m => health.isAvailable(m)
+        && (!ctx.scopedModels?.length || ctx.scopedModels.some(s => binding(s.model) === binding(m))))});
+    const classificationConfig = limitConfigured && cfg.candidate_source !== 'pi' && Array.isArray(cfg.candidates)
+      ? { ...cfg, candidates: cfg.candidates.filter(c => getModels().some(m =>
+        m.provider === (c.provider ?? 'cirno-gateway') && m.id === c.model)) } : cfg;
+    if (limitConfigured && classificationConfig.candidate_source !== 'pi' && classificationConfig.candidates?.length === 0) {
+      if (privacy.restricted(ctx)) throw new PrivacyError('PRIVACY_NO_ALLOWED_MODEL');
+      throw new ClassifierError('NO_ELIGIBLE_MODEL');
+    }
+    return classifyFn(classificationConfig, text, { signal, images, includeTaskProfile, getModels,
+      getPricingContext: catalog => buildPricingContext(effectivePrices(ctx), catalog),
+      research: async body => {
+        const researched = validateResearch(await backend.research(body, { signal, onProgress }), body.models);
+        if (!signal.aborted) updatePrices(researched, ctx);
+        return researched;
+      }, onProgress,
+      localClassify: (body, requestSignal) => backend.classify(body, { signal: requestSignal, onProgress }),
+    });
+  }
+  function beginTeam(ctx: ExtensionContext, preference: string) {
+    abortTeamRun = () => ctx.abort();
+    team = new TeamTurn({ coordinator: ctx.model!, preference, sessionId: ctx.sessionManager?.getSessionId?.(),
+      guard: guardTeam, models: teamModels, prices: effectivePrices, notify: teamNotice,
+      available: async (m, signal) => (await eligibleCatalog(cfg, [m], signal)).length === 1,
+      score: async (task, current, signal, getModels) => {
+        if (busy) throw new TeamError('TEAM_BUSY');
+        busy = true;
+        try {
+          return await scoreTask(task, current, { signal, getModels, limitConfigured: true, worker:true,
+            onProgress: message => current.ui.setStatus(ENTRY, message) });
+        } finally { busy = false; current.ui.setStatus(ENTRY, modeLabel()); }
+      },
+    });
+    teamNotice(ctx, '本轮统筹：' + team.status().coordinator + '；价格偏好：' + PRICE_MODES[preference] + '。');
+  }
+
   async function run(text: string, ctx: ExtensionContext, images = false, showScores = true) {
     if (busy) {
       if (!showScores) ctx.abort?.();
@@ -120,6 +208,8 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
     busy = true;
     const controller = new AbortController();
     const epoch = routeEpoch;
+    const coordinator = !showScores && superMode;
+    if (coordinator) preparingTeam = controller;
     const initialModel = ctx.model;
     const state = { restoreModel: initialModel, switchingTo: null };
     if (!showScores) routeState = state;
@@ -128,8 +218,11 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
     try {
       const restricted = privacy.restricted(ctx, text);
       const permittedModels = () => privacy.models(ctx, ctx.modelRegistry?.getAvailable() ?? []);
-      const getModels = () => permittedModels().filter(model => showScores || health.isAvailable(model));
+      const roster = coordinator ? new Set(teamModels(ctx).map(binding)) : null;
+      const getModels = () => coordinator ? teamModels(ctx).filter(m => roster!.has(binding(m)))
+        : permittedModels().filter(model => showScores || health.isAvailable(model));
       if (restricted && !permittedModels().length) throw new PrivacyError('PRIVACY_NO_ALLOWED_MODEL');
+      if (coordinator && !roster!.size) throw new RoutingError('TEAM_NO_ELIGIBLE_COORDINATOR');
       // Freeze preference; research may refresh prices before this turn's recommendation.
       // Numeric prices enter a separate context table, never capability evidence.
       const mode = pricePreference.get();
@@ -147,7 +240,11 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
         isActive: () => automatic && epoch === routeEpoch,
         signal, abort: () => ctx.abort(), state,
       };
-      const learn = !showScores && !images && learningEnabled(ctx);
+      const learn = !showScores && !coordinator && !images && learningEnabled(ctx);
+      const target = coordinator ? '统筹以下任务：理解目标、按需要拆分和派工、核对各部分并整合交付；需要调用工具。\n用户任务：' + text : text;
+      let scored;
+      const scores = () => scored ??= scoreTask(target, ctx, { signal, images, coordinator, includeTaskProfile: learn,
+        getModels, limitConfigured: restricted || coordinator, onProgress });
       let scope: string | undefined, embedding: number[] | undefined;
       if (learn && habits) {
         // Temporary channel failures must not create a different learning scope.
@@ -193,6 +290,11 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
             }
             // A price refresh or expiry during semantic verification invalidates
             // this habit's scope; classify against the current prices instead.
+            if (hit && boards) {
+              const ranked = recommend(await scores(), effectivePrices(ctx), mode).routing;
+              if (hit.provider !== ranked.provider || hit.model !== ranked.model) hit = null;
+              else verification = '（已核对本轮榜单、硬性要求及价格）';
+            }
             if (hit && scope === habitScope(mode, effectivePrices(ctx), permittedModels())) {
               const outcome = await switchHabitModel(hit, mode, routeOptions);
               if (outcome.status !== 'skipped') {
@@ -209,30 +311,12 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
         }
       }
       if (signal.aborted || (!showScores && epoch !== routeEpoch)) return;
-      const classificationConfig = restricted && cfg.candidate_source !== 'pi'
-        ? { ...cfg, candidates: cfg.candidates.filter(c => getModels().some(m =>
-          m.provider === (c.provider ?? 'cirno-gateway') && m.id === c.model)) } : cfg;
-      if (restricted && classificationConfig.candidate_source !== 'pi' && !classificationConfig.candidates.length) {
-        throw new PrivacyError('PRIVACY_NO_ALLOWED_MODEL');
-      }
-      const result = await classifyFn(classificationConfig, text, { signal, images,
-        includeTaskProfile: learn,
-        getModels,
-        getPricingContext: catalog => buildPricingContext(effectivePrices(ctx), catalog),
-        research: async (body) => {
-          const researched = validateResearch(await backend.research(body, { signal, onProgress }), body.models);
-          if (!signal.aborted) prices = updatePrices(researched, ctx).book;
-          return researched;
-        },
-        onProgress,
-        localClassify: (body, requestSignal) => backend.classify(body, {
-          signal: requestSignal,
-          onProgress,
-        }),
-      });
+      const result = await scores();
       // Check again after classification: trust or endpoints may have changed while it ran.
-      if (privacy.restricted(ctx)) result.candidates = result.candidates.filter(row =>
-        getModels().some(m => m.provider === row.provider && m.id === row.model));
+      if (privacy.restricted(ctx) || coordinator) {
+        const allowed = getModels();
+        result.candidates = result.candidates.filter(row => allowed.some(m => m.provider === row.provider && m.id === row.model));
+      }
       if (!showScores) {
         result.candidates = result.candidates.filter(row => !(ctx.modelRegistry?.getAvailable() ?? []).some(model =>
           model.provider === row.provider && model.id === row.model && !health.isAvailable(model)));
@@ -248,7 +332,26 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
       if (showScores) display(recommendation, ctx);
       else {
         // A changed toggle, price preference or manual model choice invalidates an in-flight route.
-        const outcome = await switchRecommendedModel(recommendation, routeOptions);
+        let outcome;
+        try {
+          outcome = await switchRecommendedModel(recommendation, routeOptions);
+        } catch (error) {
+          // No user task has been sent yet. Only retry after a clean failed selection,
+          // never replay a coordinator run which could already have edited files.
+          if (!coordinator || !(error instanceof RoutingError)
+            || !['ROUTER_MODEL_UNAVAILABLE','ROUTER_SWITCH_FAILED'].includes(error.code)
+            || !routeOptions.isActive() || signal.aborted || !sameModel(initialModel, ctx.model)) throw error;
+          const other = recommend({ ...result, candidates: result.candidates.filter(row =>
+            row.candidate_id !== recommendation.routing.recommended_candidate_id
+            && getModels().some(m => m.provider === row.provider && m.id === row.model)) }, effectivePrices(ctx), mode);
+          teamNotice(ctx, '首选统筹未能切换，正在按原价格偏好选择其他达标模型。');
+          outcome = await switchRecommendedModel(other, routeOptions);
+        }
+        if (coordinator && outcome.status !== 'skipped' && routeOptions.isActive() && !signal.aborted) {
+          if (!roster!.has(binding(ctx.model))) throw new RoutingError('ROUTER_MODEL_UNAVAILABLE');
+          guardTeam(ctx, undefined);
+          beginTeam(ctx, mode);
+        }
         if (outcome.status !== 'skipped' && learn && scope && validProfile(result.task_profile) && result.task_profile.reusable) {
           pendingUse = { id: randomUUID(), source: 'gemma', text, profile: result.task_profile,
             scope, provider: outcome.provider, model: outcome.model, epoch, embedding };
@@ -275,9 +378,10 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
         ? error.code : 'CLASSIFIER_INTERNAL_ERROR', ctx, showScores);
     } finally {
       active.delete(controller);
+      if (preparingTeam === controller) preparingTeam = null;
       if (routeState === state) routeState = null;
       busy = false;
-      if (ctx.mode === 'tui') ctx.ui.setStatus(ENTRY, automatic ? '自动路由：开' : '自动路由：关');
+      if (ctx.mode === 'tui') ctx.ui.setStatus(ENTRY, modeLabel());
     }
   }
 
@@ -307,19 +411,38 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
         const mode = priceMode(selected);
         if (!mode) { notify(`用法：${usage}`); return; }
         pricePreference.set(mode);
+        closeTeam(true);
         routeEpoch++;
         verifiedTasks.clear();
         pendingUse = null;
-        notify(`价格偏好：${PRICE_MODES[mode]}，已保存；自动路由开启时用于选择回答模型，/classify 只展示推荐。`);
+        notify(`价格偏好：${PRICE_MODES[mode]}，已保存；普通路由、协作统筹及各工作包选模共用此设置。/classify 只展示推荐。`);
       } catch (error) {
         notify(`价格设置未完成：${error instanceof PricingError ? error.code : 'PRICING_ERROR'}`, true);
       }
     },
   });
   pi.registerCommand('bakamodels', {
-    description: '/bakamodels 查看能力与价格；/bakamodels refresh 联网更新全部候选能力和价格',
+    description: '查看榜单版本及同步状态。refresh 刷新榜单，import 导入官方快照，prices 更新 API 价格。',
     handler: async (args, ctx) => {
-      if (!['', 'refresh'].includes(args.trim())) {
+      if (boards && args.trim() !== 'prices') {
+        try {
+          const option = args.trim();
+          const match = /^import\s+(livebench|superclue|decathlon)\s+(.+)$/u.exec(option);
+          let status;
+          if (match) {
+            const input = match[2].replace(/^(["'])(.*)\1$/, '$2');
+            status = await boards.import(match[1], resolve(ctx.cwd, input));
+          } else if (option === 'refresh') status = await boards.refresh('refresh');
+          else if (!option || option === 'status') status = await boards.status();
+          else { teamNotice(ctx, '用法 /bakamodels [status | refresh | prices | import 来源 文件路径]'); return; }
+          const models = ctx.modelRegistry.getAvailable();
+          const book = effectivePrices(ctx);
+          const known = models.filter(m => resolvePrice(book, m.provider, m.id).status === 'known').length;
+          teamNotice(ctx, formatBoards(status, !!boards.refreshing) + '\n官方 API 参考价格 ' + known + '/' + models.length + ' 已知');
+        } catch (e) { teamNotice(ctx, '榜单操作未完成 ' + (e instanceof ClassifierError ? e.code : 'LEADERBOARD_UNAVAILABLE')); }
+        return;
+      }
+      if (!['', 'refresh', ...(boards ? ['prices'] : [])].includes(args.trim())) {
         ctx.ui.notify('用法：/bakamodels 或 /bakamodels refresh', 'info'); return;
       }
       if (busy) { ctx.ui.notify('分类器忙，请稍后重试。', 'info'); return; }
@@ -331,9 +454,9 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
         const models = await eligibleCatalog(cfg, ctx.modelRegistry.getAvailable(), signal);
         if (!models.length) throw new ClassifierError('NO_ELIGIBLE_MODEL');
         const result = validateResearch(await backend.research({
-          models, action: args.trim() === 'refresh' ? 'refresh' : 'status',
+          models, action: boards ? 'prices' : args.trim() === 'refresh' ? 'refresh' : 'status',
         }, { signal, onProgress: (message) => ctx.ui.setStatus(ENTRY, message) }), models);
-        const update = args.trim() === 'refresh' && !signal.aborted ? updatePrices(result, ctx) : null;
+        const update = args.trim() && !signal.aborted ? updatePrices(result, ctx) : null;
         const book = update?.book ?? effectivePrices(ctx);
         const statuses = models.map(model => resolvePrice(book, model.provider, model.model).status);
         const unresolvedPrices = result.models.filter(row =>
@@ -342,7 +465,7 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
             ? row.pricing.note.replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 120) : '没有有效价格资料';
           return `${row.provider}/${row.candidate.model}：${note}`;
         });
-        const message = formatResearch(result) + `\n价格：${statuses.filter(s => s === 'known').length} 可比 · ${statuses.filter(s => s !== 'known').length} 未知/过期（官方 API 参考价，本地为 0）`
+        const message = (boards ? '官方 API 价格更新' : formatResearch(result)) + `\n价格：${statuses.filter(s => s === 'known').length} 可比 · ${statuses.filter(s => s !== 'known').length} 未知/过期（官方 API 参考价，本地为 0）`
           + (update ? `；本次更新 ${update.updated} 项` : '（只读查看）')
           + (unresolvedPrices.length ? '\n未确认价格：\n' + unresolvedPrices.join('\n') : '');
         if (ctx.mode === 'tui' || ctx.mode === 'rpc') ctx.ui.notify(message, 'info');
@@ -352,7 +475,7 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
         ctx.ui.notify(`模型资料不可用：${code}`, 'error');
       } finally {
         active.delete(controller); busy = false;
-        ctx.ui.setStatus(ENTRY, automatic ? '自动路由：开' : '自动路由：关');
+        ctx.ui.setStatus(ENTRY, modeLabel());
       }
     },
   });
@@ -364,7 +487,7 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
         const models = ctx.modelRegistry?.getAvailable() ?? [];
         const cooling = health.status().filter(row => row.retryAfterMs > 0 && models.some(model =>
           model.provider === row.provider && model.id === row.model && !health.isAvailable(model)));
-        habitNotice(`自动路由：${automatic ? '开' : '关'}。` + (cooling.length
+        habitNotice(modeLabel() + '。' + (cooling.length
           ? '\n暂时跳过：' + cooling.map(row => `${row.provider}/${row.model}（约 ${Math.ceil(row.retryAfterMs / 1000)} 秒后可重试）`).join('；')
           : '没有处于冷却期的模型。'), ctx);
         return;
@@ -372,17 +495,48 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
       if (!['', 'off'].includes(option)) {
         ctx.ui.notify('用法：/bakarouter 开启；/bakarouter off 关闭；/bakarouter status 查看状态', 'info'); return;
       }
+      if (superMode) { closeTeam(true); setTeamTools(false); }
+      superMode = false;
       automatic = option === '';
       routeEpoch++;
       verifiedTasks.clear();
       pendingUse = null;
       manualModel = null;
-      ctx.ui.setStatus(ENTRY, automatic ? '自动路由：开' : '自动路由：关');
+      ctx.ui.setStatus(ENTRY, modeLabel());
       const message = automatic
         ? '自动路由已开启；普通输入按任务能力和价格偏好选择回答模型。/classify 仍只分类。'
         : '自动路由已关闭；后续使用当前选中的模型，可通过 /model 手动更换。';
       if (ctx.mode === 'tui' || ctx.mode === 'rpc') ctx.ui.notify(message, 'info');
       else process.stderr.write(JSON.stringify({ type: 'cirno-router-status', enabled: automatic, message }) + '\n');
+    },
+  });
+  pi.registerCommand('superbakarouter', {
+    description: '开启协作路由：统筹派发、本地选模、各角色汇报；off 关闭，status 查看分工。',
+    handler: async (args, ctx) => {
+      const option = args.trim().toLowerCase();
+      if (option === 'status') {
+        const info = team?.status() ?? lastTeam;
+        const states = { assigned: '已分配', running: '执行中', reported: '已汇报', failed: '未完成',
+          unsent: '未派发', cancelled: '已取消' };
+        const jobs = info?.jobs.map(j => j.role + ' → ' + (j.attempts.join(' → ') || j.model)
+          + '（' + states[j.state] + '，派发 ' + j.attempts.length + ' 次）') ?? [];
+        teamNotice(ctx, '协作路由：' + (superMode ? '开' : '关') + '；价格偏好：' + PRICE_MODES[pricePreference.get()]
+          + (info ? '\n' + (team ? '本轮' : '上轮') + '统筹：' + info.coordinator + (jobs.length ? '\n' + jobs.join('\n') : '；没有工作包。') : '；尚无分工。'));
+        return;
+      }
+      if (!['', 'on', 'off'].includes(option)) { teamNotice(ctx, '用法：/superbakarouter [on | off | status]'); return; }
+      if (option === 'off' && !superMode) { teamNotice(ctx, '协作路由已关闭。'); return; }
+      if (option !== 'off' && superMode) { teamNotice(ctx, '协作路由已开启。'); return; }
+      if (!setTeamTools(option !== 'off')) {
+        setTeamTools(false);
+        teamNotice(ctx, '协作工具未加载或被当前 Pi 配置排除，未开启协作路由。'); return;
+      }
+      closeTeam(true);
+      automatic = superMode = option !== 'off';
+      routeEpoch++; pendingUse = null; manualModel = null; verifiedTasks.clear();
+      ctx.ui.setStatus(ENTRY, modeLabel());
+      teamNotice(ctx, superMode ? '协作路由已开启：普通输入先选统筹，再按工作包选模；各执行模型调用可能分别计费。'
+        : '协作路由已关闭，后续使用当前模型；/bakarouter 可开启单模型路由。');
     },
   });
   pi.registerCommand('bakahabits', {
@@ -412,16 +566,22 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
         const count = data.groups.reduce((n, g) => n + g.counts.reduce((s, c) => s + c.count, 0), 0);
         habitNotice(`习惯学习：${data.enabled ? '开' : '关'}；门槛 ${data.threshold} 次；${data.groups.length} 个类型/价格范围，${count} 次成功使用。近邻 Gemma 核验：${cfg.habits?.verify_uncertain === false ? '关' : '开'}。命中不强化；/bakahabits off 恢复每次 Gemma 分类，clear 清空记录。`, ctx);
       } catch (error) { habitFailure(error, ctx); }
-      finally { active.delete(controller); ctx.ui.setStatus(ENTRY, automatic ? '自动路由：开' : '自动路由：关'); }
+      finally { active.delete(controller); ctx.ui.setStatus(ENTRY, modeLabel()); }
     },
   });
   pi.on('session_start', async (_event, ctx) => {
+    closeTeam(); lastTeam = null;
+    if (superMode) automatic = false;
+    setTeamTools(false);
+    superMode = false;
     routeEpoch++; pendingUse = null; manualModel = null;
     verifiedTasks.clear();
     privacy.start(ctx);
-    if (ctx.mode === 'tui') ctx.ui.setStatus(ENTRY, automatic ? '自动路由：开' : '自动路由：关');
+    if (boards) void boards.start().catch(() => {});
+    if (ctx.mode === 'tui') ctx.ui.setStatus(ENTRY, modeLabel());
   });
   pi.on('before_agent_start', async (event, ctx) => {
+    closeTeam();
     pendingUse = null;
     snapshotModels(ctx);
     turnHealthMessages = [];
@@ -430,11 +590,20 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
     if (event.messageType !== 'user') { privacy.enforce(ctx); return; }
     if (automatic && event.systemPromptOptions) {
       const options = event.systemPromptOptions;
+      const guideline = superMode ? TURN_GUIDELINE + '\n' + TEAM_GUIDE : TURN_GUIDELINE;
       if (options.customPrompt) {
-        if (!options.appendSystemPrompt?.includes(TURN_GUIDELINE)) {
-          options.appendSystemPrompt = [options.appendSystemPrompt, TURN_GUIDELINE].filter(Boolean).join('\n');
+        if (!options.appendSystemPrompt?.includes(guideline)) {
+          options.appendSystemPrompt = [options.appendSystemPrompt, guideline].filter(Boolean).join('\n');
         }
-      } else if (!options.promptGuidelines.includes(TURN_GUIDELINE)) options.promptGuidelines.push(TURN_GUIDELINE);
+      } else if (!options.promptGuidelines.includes(guideline)) options.promptGuidelines.push(guideline);
+    }
+    if (superMode) {
+      if (!TEAM_TOOLS.every(name => pi.getActiveTools().includes(name))) {
+        ctx.abort(); reportError('TEAM_TOOLS_UNAVAILABLE', ctx, false); return;
+      }
+      await run(event.prompt, ctx, !!event.images?.length, false);
+      if (!team || !privacy.enforce(ctx)) { closeTeam(); ctx.abort(); }
+      return;
     }
     // An explicit manual selection owns the next turn; when routing is off it remains the current choice.
     if (manualModel && sameModel(manualModel, ctx.model) && learningEnabled(ctx)) {
@@ -455,6 +624,7 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
   });
   pi.on('model_select', async (event) => {
     if (routeState && event.source === 'set' && sameModel(event.model, routeState.switchingTo)) return;
+    closeTeam(true);
     routeEpoch++;
     verifiedTasks.clear();
     pendingUse = null;
@@ -492,9 +662,10 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
         shouldRecord: () => !signal.aborted && use.epoch === routeEpoch });
     } catch (error) {
       if (!signal.aborted && !(error instanceof ClassifierError && error.code === 'SEMANTIC_INPUT_TOO_LONG')) habitFailure(error, ctx);
-    } finally { active.delete(controller); ctx.ui.setStatus(ENTRY, automatic ? '自动路由：开' : '自动路由：关'); }
+    } finally { active.delete(controller); ctx.ui.setStatus(ENTRY, modeLabel()); }
   });
   pi.on('agent_settled', async (event, ctx) => {
+    closeTeam();
     health.recordTurn(turnHealthMessages, { cancelled: event.aborted || !!ctx.signal?.aborted, models: turnModels });
     turnHealthMessages = [];
   });
@@ -513,12 +684,13 @@ export function registerClassifier(pi: ExtensionAPI, cfg: ReturnType<typeof read
     else if (ctx.mode === 'print') process.stderr.write(label + '\n');
   });
   pi.on('session_shutdown', async () => {
+    closeTeam(); superMode = false; lastTeam = null;
     automatic = false;
     routeEpoch++;
     pendingUse = null; manualModel = null;
     verifiedTasks.clear();
     for (const controller of active) controller.abort();
     privacy.close();
-    await Promise.all([backend.close(), habits?.semantic.close()]);
+    await Promise.all([backend.close(), habits?.semantic.close(), boards?.close()]);
   });
 }

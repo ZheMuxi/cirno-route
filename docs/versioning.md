@@ -10,8 +10,9 @@
 
 ## 当前版本
 
-- `v0.5.0`：当前版本。新增文件保护、官方 API 参考价格同步及跨语言习惯核验；使用方式与回退步骤见 [版本说明](../releases/v0.5.0.md)。
-- `v0.4.0`：上一版，含 E5 语义匹配及习惯路由。此版本没有文件保护；需要继续限制文件外发时请勿回退。
+- `v0.6.0` 为当前版本，包含官方榜单同步、十分制任务分、定向能力补查和 Pi 多模型协作。[修改报告](../releases/v0.6.0.md)
+- `v0.5.0` 为上一版，可回退到四分制 Pi 路由，并继续使用文件保护、官方 API 参考价格及跨语言习惯核验。[版本说明](../releases/v0.5.0.md)
+- `v0.4.0` 含 E5 语义匹配及习惯路由。需要限制文件外发的会话应使用 v0.5.0 或更高版本。
 - `v0.3.0`：使用内置原生推理和 V2.1 评分标准，不读取习惯库。
 - `v0.2.0`：更早版本，使用 V2 提示词与插件管理的 llama-server，已包含能力研究、价格偏好及 Pi 实际路由。
 - `docs-v0.2.0-portable-docs`：其余指南、历史评测说明和发布说明的通用化文档快照；功能版本仍为 0.2.0，提示词、运行时及依赖锁未变。
@@ -20,7 +21,7 @@
 - `v0.1.0-v3-baseline`：切换前的 V3 完整源码快照，保留用于回退和比较。
 - Python 项目、模块、Pi 插件、原生包与语义包共同使用项目版本；提示词及任务类型 schema 独立编号。发布标签固定，后续修复另发新版本。
 - 实际机器上的密钥、会话、模型缓存与日志保留在 `.runtime/`、`../Pi/.state/`、已有模型缓存中，不进入 Git，也不随代码版本回退。
-- `releases/v0.5.0.md` 记录当前版本的功能、使用方式和限制；旧发布记录继续保留。实际 GGUF 和 llama.cpp 下载由 `src/cirno_route/resources/local-runtime-v1.json` 固定并校验，E5 下载由 `packages/pi-extension/semantic-runtime/model.json` 固定并校验。
+- `releases/v0.6.0.md` 记录当前版本的功能、使用方式和评分口径。实际 GGUF 和 llama.cpp 下载由 `src/cirno_route/resources/local-runtime-v1.json` 固定并校验，E5 下载由 `packages/pi-extension/semantic-runtime/model.json` 固定并校验。
 
 ## 2026-10-20 恢复验证
 
@@ -56,14 +57,15 @@ node --test packages/pi-extension/*.test.mjs
 这是源码及锁定依赖的人工回退流程，尚未实现自动发布目录切换。开始前退出 Pi，并停止自己启动的独立分类 HTTP 服务；不要终止其他应用的 llama.cpp 服务。
 
 1. 在项目目录运行 `git status --short`，必须没有未提交文件。有开发改动时先保留现场，明确保存方式；未经用户要求，不为回退自行创建提交，勿用 `reset --hard` 或 `clean` 丢弃改动。
-2. 仅关闭习惯功能时，使用 `/bakahabits off`，或退出 Pi 后设置 `CIRNO_HABITS=0` 启动。仅切回旧推理后端时，保持当前版本，改用 `./scripts/start-pi-llama.sh`。完整回退到不含习惯功能的前版，执行：
+2. 要从 v0.6.0 回退到上一版的四分制 Pi 路由，请获取标签并恢复 v0.5.0 的源码与依赖。
 
 ```bash
 # 从仓库根目录执行
 git fetch origin --tags
-git switch --detach v0.3.0
+git switch --detach v0.5.0
 uv sync --frozen --python 3.12
 ./scripts/install-native-runtime.sh
+./scripts/install-semantic-runtime.sh
 ```
 
 3. `v0.4.0`、`v0.3.0` 与 `v0.2.0` 的 Pi 依赖清单相同，现有 `../Pi` 可直接复用。v0.3.0 不读取新增习惯文件，回退无需删除或迁移该文件。以后切到不同 Pi 依赖版本时，用该版本的安装脚本同步；更早的 `v0.1.0-v3-baseline` 也保留，但没有安装脚本，可用 `tooling/pi/package*.json` 配合 `npm ci --prefix ../Pi` 恢复。需要更早的 V2 评分流程时可选择 v0.2.0。
@@ -71,7 +73,7 @@ uv sync --frozen --python 3.12
 5. 回到当前版本并恢复锁定的原生与语义依赖：
 
 ```bash
-git switch --detach v0.5.0
+git switch --detach v0.6.0
 uv sync --frozen --python 3.12
 ./scripts/install-native-runtime.sh
 ./scripts/install-semantic-runtime.sh

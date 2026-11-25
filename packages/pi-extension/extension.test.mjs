@@ -4,6 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import extension, { registerClassifier } from './index.ts';
+import { LocalBackend } from './local-backend.mjs';
 import { HabitStore, manualTaskProfile } from './habits.mjs';
 
 function habitHarness(t) {
@@ -108,7 +109,11 @@ test('CIRNO_HABITS=0 restores ordinary Gemma routing without learning or loading
   await h.command('bakahabits', 'on'); assert(h.notices.at(-1).includes('CIRNO_HABITS=0'));
 });
 
-test('manual classification and unsupported images never switch models; default routing is off', async () => {
+test('manual classification and unsupported images never switch models; default routing is off', async t => {
+  t.mock.method(LocalBackend.prototype, 'request', async method => {
+    assert.equal(method, 'board_admin');
+    return { sources: [] };
+  });
   const commands = new Map(), events = new Map(), entries = [];
   const pi = {
     registerEntryRenderer: () => {},
@@ -118,6 +123,7 @@ test('manual classification and unsupported images never switch models; default 
     // No dispatch API: manual commands and rejected images must not dispatch.
   };
   extension(pi);
+  t.after(() => events.get('session_shutdown')());
   assert(commands.has('classify'));
   assert(commands.has('bakarouter'));
   assert(!commands.has('classifier-auto'));
@@ -147,7 +153,6 @@ test('manual classification and unsupported images never switch models; default 
   await commands.get('bakarouter').handler('off', ctx);
   await commands.get('classify').handler(' ', ctx);
   assert.equal(entries[0].data.error, 'EMPTY_TASK');
-  await events.get('session_shutdown')();
 });
 
 test('only /classify displays scores; every reply identifies the actual execution model', async () => {
@@ -313,4 +318,100 @@ test('turn off/on, preference changes, manual model changes and shutdown invalid
     assert.equal(switches.length, 0, change);
     assert.equal(entries.length, 0, change);
   }
+});
+
+test('team assignment and one alternate both honor the price mode; workers return reports without tools', async () => {
+  const { TeamTurn } = await import('./team-router.mjs');
+  const prices = [1, 1.2, 2, 2.2, 6, 5];
+  const models = prices.map((_, n) => ({ provider: 'demo', id: 'm' + n, api: 'example', baseUrl: 'https://example.invalid' }));
+  const coordinator = { ...models[0], id: 'coordinator' };
+  const book = { schema_version: '1', currency: 'USD', models: Object.fromEntries(prices.map((price, i) =>
+    ['demo/m' + i, { input_per_million: price, output_per_million: price, source: 'user',
+      checked_at: '2026-01-01', valid_until: '9999-12-31', note: 'fixture' }])) };
+  const score = async () => ({ source: 'gemma', status: 'ok', candidates: models.map((m,i) =>
+    ({ provider: m.provider, model: m.id, candidate_id: m.id, quality_level: i < 2 ? 3 : 4, evidence_ids: ['e'] })) });
+  for (const [preference, expected] of [['cheap', ['m0','m1']], ['balanced', ['m2','m3']], ['premium', ['m4','m5']]]) {
+    const calls = [];
+    const ctx = { model: coordinator, modelRegistry: { streamSimple(model, packet) {
+      calls.push(model.id); assert.equal(packet.tools, undefined);
+      assert.equal(packet.messages.length, 1);
+      return { result: async () => ({ provider: model.provider, model: model.id,
+        ...(calls.length === 1 ? { stopReason: 'error', errorMessage: '503: temporarily unavailable' }
+          : { stopReason: 'stop', content: [{ type: 'text', text: 'worker report' }] }) }) };
+    } } };
+    const team = new TeamTurn({ coordinator, preference, score, models: () => models, prices: () => book,
+      available: async () => true, guard() {}, notify() {} });
+    try {
+      const [job] = await team.assign([{ role: '后端', brief: '提供图书查询实现。' }], ctx);
+      assert.equal(job.model, 'demo/' + expected[0]); assert.deepEqual(calls, []);
+      const [report] = await team.dispatch([{ id: job.id }], ctx);
+      assert.deepEqual(calls, expected); assert.equal(report.report, 'worker report');
+      assert.equal(report.model, 'demo/' + expected[1]);
+      await assert.rejects(team.dispatch([{ id: job.id, feedback: '再做一次', reassign: true }], ctx), /TEAM_ATTEMPT_LIMIT/);
+      assert.deepEqual(calls, expected);
+    } finally { team.close(); }
+  }
+});
+
+test('a team never sends previously scored data to a model rebound during the final availability check', async () => {
+  const { TeamTurn } = await import('./team-router.mjs');
+  const coordinator = { provider: 'demo', id: 'lead', api: 'example', baseUrl: 'https://one.invalid' };
+  const model = { ...coordinator, id: 'worker' }; let sends = 0;
+  const ctx = { model: coordinator, modelRegistry: { streamSimple() { sends++; } } };
+  const team = new TeamTurn({ coordinator, preference: 'balanced', models: () => [model],
+    score: async () => ({ status: 'ok', source: 'gemma', candidates: [
+      { provider: 'demo', model: 'worker', candidate_id: 'w', quality_level: 4, evidence_ids: ['e'] }] }),
+    prices: () => ({ schema_version: '1', currency: 'USD', models: {} }), guard() {}, notify() {},
+    available: async m => { m.baseUrl = 'https://changed.invalid'; return true; } });
+  try {
+    const [job] = await team.assign([{ role: '审阅', brief: '核对接口契约。' }], ctx);
+    const [result] = await team.dispatch([{ id: job.id }], ctx);
+    assert.equal(result.error, 'TEAM_MODEL_UNAVAILABLE'); assert.equal(sends, 0);
+  } finally { team.close(); }
+});
+
+test('Pi can assign and dispatch a task-sized batch, collect every report, and add more work later', async () => {
+  const { TeamTurn } = await import('./team-router.mjs');
+  const { registerTeamTools } = await import('./team-tools.mjs');
+  const { validateToolArguments } = await import('@earendil-works/pi-ai');
+  const model = { provider: 'demo', id: 'worker', api: 'example', baseUrl: 'https://example.invalid' };
+  const score = async () => ({ status: 'ok', source: 'gemma', candidates: [
+    { provider: model.provider, model: model.id, candidate_id: model.id, quality_level: 4, evidence_ids: ['e'] }] });
+  const team = new TeamTurn({ coordinator: model, preference: 'balanced', score, models: () => [model],
+    prices: () => ({ schema_version: '1', currency: 'USD', models: {} }), available: async () => true, guard() {}, notify() {} });
+  let active = 0, peak = 0;
+  const calls = [];
+  const ctx = { model, modelRegistry: { streamSimple(_model, packet) {
+    const { role } = JSON.parse(packet.messages[0].content);
+    return { result: async () => {
+      calls.push(role); peak = Math.max(peak, ++active);
+      await new Promise(resolve => setImmediate(resolve));
+      active--;
+      return { provider: model.provider, model: model.id, stopReason: 'stop', content: [{ type: 'text', text: role }] };
+    } };
+  } } };
+  const tools = new Map();
+  registerTeamTools({ registerTool: tool => tools.set(tool.name, tool) }, () => team);
+  async function call(name, args) {
+    const tool = tools.get(name);
+    const validated = validateToolArguments(tool, { type: 'toolCall', id: 'call', name, arguments: args });
+    const result = await tool.execute('call', validated, undefined, undefined, ctx);
+    return JSON.parse(result.content[0].text);
+  }
+  const roles = ['规划', '前端', '后端', '数据迁移', '文档', '无障碍', '搜索', '同步', '本地化'];
+  const parts = roles.map(role => ({ role, brief: '提交' + role + '部分。' }));
+  try {
+    assert.equal(tools.get('cirno_team_assign').parameters.properties.parts.maxItems, undefined);
+    assert.equal(tools.get('cirno_team_dispatch').parameters.properties.jobs.maxItems, undefined);
+    const roster = await call('cirno_team_assign', { parts });
+    assert.equal(new Set(roster.map(job => job.id)).size, roles.length);
+    assert.deepEqual(calls, []);
+    const reports = await call('cirno_team_dispatch', { jobs: roster.map(({ id }) => ({ id })) });
+    assert.deepEqual(reports.map(job => job.report), roles);
+    assert.deepEqual(reports.map(job => job.id), roster.map(job => job.id));
+    assert.deepEqual([...calls].sort(), [...roles].sort());
+    assert.equal(peak, 2);
+    const [extra] = await call('cirno_team_assign', { parts: [{ role: '验收', brief: '汇总验收清单。' }] });
+    assert.deepEqual(team.status().jobs.map(job => job.id), [...roster, extra].map(job => job.id));
+  } finally { team.close(); }
 });

@@ -220,6 +220,31 @@ export async function classify(cfg, text, { signal, images = false, localClassif
     omitted_candidates: cfg.candidates.filter(c => !available.has(c.model)).map(c => c.candidate_id) };
 }
 
+const labels = { frontend: '前端', coding: '编程', math: '数学', reasoning: '推理', knowledge: '知识',
+  text: '语言写作', chinese: '中文', tools: '工具', web: '联网', vision: '视觉',
+  long_context: '长上下文', structured_output: '结构化输出' };
+
+function formatBoardRow(row) {
+  const lines = [(row.provider + '/' + row.model) + ' · '
+    + (Number.isFinite(row.quality_level) ? row.quality_level.toFixed(1) + '/10' : '未知/10')
+    + ' · ' + ({ measured: '实测分项齐全', partial: '部分实测', inferred: '资料推定（候补）', unknown: '资料不足' }[row.basis])
+    + (row.basis === 'partial' ? ' · 加权覆盖 ' + Math.round(row.coverage * 100) + '%' : '')
+    + (row.missing_requirements?.length ? ' · 硬性要求未满足或未证实 ' + row.missing_requirements.map(k => labels[k]).join('、') : '')];
+  for (const part of row.components) {
+    lines.push('  ' + labels[part.dimension] + '（' + Math.round(100 * part.weight) + '%） '
+      + (part.score === null ? '未知' : part.score.toFixed(1)) + '  '
+      + part.evidence.map(e => e.evaluation + ' ' + e.raw + ' [' + (e.original_model ?? e.model) + ', '
+        + (e.effort || '未注明档位') + ', ' + e.environment + ', ' + e.version + '] ' + e.url).join(' / '));
+    if (part.missing_evaluations?.length) lines.push('    缺少可比成绩 ' + part.missing_evaluations.join('、'));
+  }
+  for (const f of row.inferred) lines.push('  资料推定 ' + labels[f.dimension] + ' ' + f.url);
+  if (row.alias) lines.push('  型号映射 ' + row.alias.model + ' ' + row.alias.source_url);
+  for (const q of row.lookups) lines.push('  补查 ' + labels[q.dimension] + ' · '
+    + ({missing:'缺项', not_listed:'各榜查无型号', read_failed:'榜单读取失败'}[q.case])
+    + (q.cache_hit ? ' · 缓存' : '') + (q.error ? ' · ' + q.error : ''));
+  return lines.join('\n');
+}
+
 export function formatResult(result) {
   if (result.error) return `本地分类不可用：${result.error}`;
   const lines = [`本地分类：${result.status} · ${result.source} · ${result.latency_ms ?? '?'} ms`];
@@ -233,11 +258,16 @@ export function formatResult(result) {
     lines.push(`价格：${result.routing.known_prices} 可比 · ${result.routing.unknown_prices} 未知/过期；按官方 API 参考价及本地零价比较 1k 输入 + 1k 输出，不是本次账单。`);
   }
   for (const row of result.candidates) {
-    lines.push(`${row.provider && row.model ? `${row.provider}/${row.model}` : row.candidate_id}: ${row.quality_level ?? '弃权'}/4 · 不确定性 ${row.uncertainty}`);
+    if (result.score_scale === 10) lines.push(formatBoardRow(row));
+    else lines.push(`${row.provider && row.model ? `${row.provider}/${row.model}` : row.candidate_id}: ${row.quality_level ?? '弃权'}/4 · 不确定性 ${row.uncertainty}`);
     if (row.pricing) lines.push(`  ${formatPrice(row.pricing)}`);
   }
   if (result.reason_codes.length) lines.push(result.reason_codes.join(', '));
-  lines.push(result.research
+  if (result.score_scale === 10) {
+    const failed = result.boards.filter(b => b.enabled && b.error);
+    if (failed.length) lines.push('榜单读取异常 ' + failed.map(b => b.source + ' ' + b.error).join('、'));
+    lines.push('评分口径 ' + result.pipeline_version + ' · 固定参考组百分位');
+  } else lines.push(result.research
     ? '仅评分建议；联网资料不代表本地实测，跨批评分尚未校准。'
     : '仅评分建议；能力资料为配置依据，尚无本地成功率校准。');
   return lines.join('\n');

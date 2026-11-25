@@ -162,7 +162,7 @@ class ModelIdentity(Contract):
 
 class ResearchRequest(Contract):
     models: Annotated[list[ModelIdentity], Field(min_length=1, max_length=128)]
-    action: Literal["ensure", "refresh", "status"] = "ensure"
+    action: Literal["ensure", "refresh", "prices", "status"] = "ensure"
 
     @model_validator(mode="after")
     def unique(self):
@@ -864,12 +864,16 @@ class CapabilityResearch:
             self.share_prices(profiles)
         failures = [self.failure(m) for m in request.models]
         needs_network = request.action != "status" and (
-            request.action == "refresh"
+            request.action in {"refresh", "prices"}
             or any(
-                (p is None and f is None) or self.price_due(p)
+                (p is None and f is None)
+                or self.price_due(p)
+                or (p is not None and p.response_model == "price-only")
                 for p, f in zip(profiles, failures, strict=True)
             )
         )
+        if request.action == "prices":
+            needs_network = any(price_search_query(m) for m in request.models)
         key = search_key = ""
         credential_error = None
         if needs_network:
@@ -896,11 +900,35 @@ class CapabilityResearch:
             async def one(identity, cached, failure):
                 nonlocal finished, fatal
                 error = None
+                if request.action == "prices" and cached is None:
+                    cached = Profile(
+                        cache_key=self.key(identity),
+                        identity=identity,
+                        retrieved_at=self.now(),
+                        expires_at=self.now() + self.settings.ttl_hours * 3600,
+                        researcher=self.settings.model,
+                        response_model="price-only",
+                        prompt_sha256=self.prompt_hash,
+                        findings=unknown_findings(),
+                        sources=[],
+                        usage={},
+                    )
                 profile = cached
-                price_only = (
-                    cached is not None and request.action == "ensure" and self.price_due(cached)
+                needs_capability = (
+                    request.action == "ensure" and cached and cached.response_model == "price-only"
                 )
-                cache_hit = cached is not None and request.action != "refresh" and not price_only
+                price_only = (
+                    cached is not None
+                    and request.action == "ensure"
+                    and not needs_capability
+                    and self.price_due(cached)
+                ) or (request.action == "prices" and bool(price_search_query(identity)))
+                cache_hit = (
+                    cached is not None
+                    and request.action != "refresh"
+                    and not price_only
+                    and not needs_capability
+                )
                 cooldown_hit = (
                     cached is None and failure is not None and request.action != "refresh"
                 )
